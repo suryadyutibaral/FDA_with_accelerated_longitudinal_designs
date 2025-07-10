@@ -385,10 +385,10 @@ evaluate_simulations <- function(tfine, sim_al_data, sim_data, acd_fda_2, plot =
       pivot_longer(-subject, names_to = "Metric", values_to = "Value") %>%
       separate(Metric, into = c("Metric_Type", "Version"), sep = "_")
     
-    print(plot_metric("ISE"))
-    print(plot_metric("IE"))
-    print(plot_metric("MSE"))
-    print(plot_metric("Bias"))
+    print(plot_metric("ISE", df = metrics_long))
+    print(plot_metric("IE", df = metrics_long))
+    print(plot_metric("MSE", df = metrics_long))
+    print(plot_metric("Bias", df = metrics_long))
     
   }
   

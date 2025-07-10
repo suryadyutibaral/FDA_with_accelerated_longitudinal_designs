@@ -1,0 +1,228 @@
+---
+title: "FDA_ALD_sim"
+author: "Suryadyuti Baral"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+library(pracma)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(parallel)
+library(fda)
+begin = Sys.time()
+source("C:/Users/sonnet/Box/FDA/Dynamic-Modeling-of-Functional-Snippets-main/code/ldm.R")
+source("C:/Users/sonnet/Box/FDA/Dynamic-Modeling-of-Functional-Snippets-main/code/kerFctn.R")
+source("C:/Users/sonnet/Box/FDA/FDA_paper/Rfunctions.R")
+set.seed(3)
+n_subj = 250
+age <- 0:19
+method <- "normal"
+rep_cond <- 100
+sim_data <- simulate_exponential_decay(n_subjects = n_subj, x = seq(0, 19, length.out = 240), noise = .1)
+
+# Example plot of 10 random subjects
+matplot(sim_data$x, sim_data$trajectories[, 1:n_subj], type = "l", lty = 1,
+        ylab = "y", xlab = "Time", main = "Exponential Decay Trajectories")
+
+```
+
+```{r}
+sim_al_data <- simulate_accelerated_longitudinal(Y_full = sim_data$trajectories, n_time_points = 3)
+
+# Plot sparse trajectories
+matplot(sim_al_data$x_full, sim_al_data$Y_full, type = "l", lty = 2,
+        col = "gray", ylab = "y", xlab = "Time", main = "Accelerated Longitudinal Sampling")
+for (i in 1:n_subj) {
+  points(sim_al_data$Lt[[i]], sim_al_data$Ly[[i]], col = i, pch = 16)
+  lines(sim_al_data$Lt[[i]], sim_al_data$Ly[[i]], col = i)
+}
+
+```
+
+```{r}
+# Generate initial values depending on method
+  if (method == "normal") {
+    z0 <- generate_initial_values(
+      Lt_list = sim_al_data$Lt,
+      Ly_list = sim_al_data$Ly,
+      age_grid = age,
+      m = 1,
+      method = "normal"
+    )
+    z02 <- generate_initial_values(
+      Lt_list = sim_al_data$Lt,
+      Ly_list = sim_al_data$Ly,
+      age_grid = age,
+      m = rep_cond,
+      method = "normal"
+    )
+  } else if (method == "replicate") {
+    z0 <- generate_initial_values(
+      Lt_list = sim_data$Lt_true,
+      Ly_list = sim_data$Ly_true,
+      age_grid = age,
+      m = 1,
+      method = "replicate"
+    )
+    z02 <- generate_initial_values(
+      Lt_list = sim_data$Lt_true,
+      Ly_list = sim_data$Ly_true,
+      age_grid = age,
+      m = rep_cond,
+      method = "replicate"
+    )
+  } else {
+    stop("Invalid method. Use 'normal' or 'replicate'.")
+  }
+
+  # Fit models
+acd_fda <- ldm(sim_al_data$Ly, sim_al_data$Lt, z0, age,
+    optns = list(M = nrow(z0), cores = 24))
+```
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# 1. Round time names from rownames of Y_full
+time_names <- round(sim_al_data$x_full, 1)
+x_rounded <- round(age, 1)
+unique_times <- sort(unique(x_rounded))
+
+# 2. For each unique time in age, find the first matching index in time_names
+matching_indices <- sapply(unique_times, function(t) {
+  match(t, time_names)  # match returns the first occurrence
+})
+
+# 3. Subset the trajectory matrix using these first-matching indices
+Y_matched <- sim_al_data$Y_full[matching_indices, ]
+
+
+# 3. Convert to long format for ggplot
+true_df <- as.data.frame(Y_matched) %>%
+  mutate(Time = age) %>%
+  pivot_longer(-Time, names_to = "Subject", values_to = "y")
+
+# 4. Estimated trajectories from acd_fda$path
+est_df <- as.data.frame(t(acd_fda$path)) %>%
+  mutate(Time = age) %>%
+  pivot_longer(-Time, names_to = "Subject", values_to = "y")
+
+# 5. Combine and plot
+ggplot() +
+  geom_line(data = true_df, aes(x = Time, y = y, group = Subject), 
+            color = "gray", linetype = "dashed", alpha = 0.4) +
+  geom_line(data = est_df, aes(x = Time, y = y, group = Subject), 
+            color = "steelblue", alpha = 0.4) +
+  labs(x = "Time", y = "y", title = "Accelerated Longitudinal Sampling") +
+  theme_minimal()
+
+
+```
+
+```{r}
+acd_fda_2 <- ldm(sim_al_data$Ly, sim_al_data$Lt, z02, age,
+    optns = list(
+      M = nrow(z02),
+      bw1 = acd_fda$optns$bw1,
+      bw2 = acd_fda$optns$bw2,
+      regular = FALSE, cores = 24
+    )
+  )
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(purrr)
+
+# 1. Round time names from rownames of Y_full
+time_names <- round(sim_al_data$x_full, 1)
+x_rounded <- round(age, 1)
+unique_times <- sort(unique(x_rounded))
+
+# 2. For each unique time in age, find the first matching index in time_names
+matching_indices <- sapply(unique_times, function(t) {
+  match(t, time_names)  # match returns the first occurrence
+})
+
+# 3. Subset the trajectory matrix using these first-matching indices
+Y_matched <- sim_al_data$Y_full[matching_indices, ]
+colnames(Y_matched) <- paste0("Subject_", seq_len(ncol(Y_matched)))
+
+# 4. Convert to long format for true trajectories
+true_df <- as.data.frame(Y_matched) %>%
+  mutate(Time = age) %>%
+  pivot_longer(-Time, names_to = "Subject", values_to = "y") %>%
+  mutate(group = "True")
+
+# 5. Estimated trajectories from acd_fda$path
+est_df <- as.data.frame(t(acd_fda_2$path)) %>%
+  mutate(Time = age) %>%
+  pivot_longer(-Time, names_to = "Subject", values_to = "y") %>%
+  mutate(group = "Estimated")
+
+# 6. (Optional) Observed snippets from sim_al_data$Ly
+obs_df <- map2_dfr(sim_al_data$Ly, sim_al_data$Lt,
+                   ~ tibble(Time = .y, y = .x),
+                   .id = "Subject") %>%
+  mutate(group = "Observed")
+
+# 7. Combine all
+df_all <- bind_rows(true_df, est_df, obs_df)
+
+# 8. Plot
+ggplot(df_all, aes(x = Time, y = y, group = Subject, color = group)) +
+  geom_line(data = filter(df_all, group == "True"), 
+            linetype = "dashed", alpha = 0.4, linewidth = 0.4) +
+  geom_line(data = filter(df_all, group == "Estimated"), 
+            alpha = 0.4, linewidth = 0.4) +
+  geom_line(data = filter(df_all, group == "Observed"), 
+            linewidth = 0.4) +
+  scale_color_manual(values = c("True" = "gray30",
+                                "Estimated" = "steelblue",
+                                "Observed" = "red")) +
+  labs(x = "Time", y = "Functional Value", color = "Trajectory Type",
+       title = "Accelerated Longitudinal Sampling: \n True vs Estimated vs Observed") +
+  theme_minimal(base_size = 14)
+
+
+```
+
+```{r}
+# Evaluate final model
+results <- evaluate_simulations(tfine = tfine, sim_al_data = sim_al_data, sim_data = sim_data, acd_fda_2 = acd_fda_2, plot = TRUE)
+
+mean(results$ise_opt)
+mean(results$ise_all)
+mean(results$ie_opt)
+mean(results$ie_all)
+mean(results$mse_opt)
+mean(results$mse_all)
+mean(results$bias_opt)
+mean(results$bias_all)
+
+n <- length(results$ise_all)
+var1 <- var(results$ise_all)
+var2 <- var(results$ise_opt)
+
+chi_sq_stat <- (n - 1) * var1 / var2
+p_val <- pchisq(chi_sq_stat, df = n - 1, lower.tail = FALSE)
+
+cat("Chi-squared statistic:", chi_sq_stat, "\n")
+cat("p-value:", p_val, "\n")
+
+```
+
+```{r}
+end = Sys.time()
+end - begin
+```
+

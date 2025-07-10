@@ -141,8 +141,9 @@ generate_initial_values <- function(Lt_list, Ly_list, age_grid, m = 1, method = 
 }
 
 compute_incremental_avg_mse <- function(sim_vals, obs_vals) {
+  sim_vals <- sim_vals[, colSums(is.na(sim_vals)) == 0, drop = FALSE]
   # Compute individual MSEs
-  mse <- colMeans((sim_vals - obs_vals)^2, na.rm = TRUE)
+  mse <- colMeans((sim_vals - obs_vals)^2)
 
   # Sort simulations by MSE
   sorted_idx <- order(mse)

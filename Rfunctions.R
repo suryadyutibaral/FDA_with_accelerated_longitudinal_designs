@@ -191,7 +191,18 @@ compute_incremental_avg_mse <- function(sim_vals, obs_vals) {
 plot_metric <- function(metric_type, df = metrics_long) {
   df_sub <- df %>% filter(Metric_Type == metric_type)
   
-  # Calculate outliers for each group
+  # Convert to wide format for paired t-test
+  df_wide <- df_sub %>%
+    dplyr::select(subject, Version, Value) %>%
+    pivot_wider(names_from = Version, values_from = Value)
+  
+  # Paired t-test
+  ttest_res <- t.test(df_wide$Opt, df_wide$All, paired = TRUE)
+  t_stat <- round(ttest_res$statistic, 2)
+  p_val <- signif(ttest_res$p.value, 3)
+  test_label <- paste0("t = ", t_stat, ", p = ", p_val)
+  
+  # Calculate outliers
   df_outliers <- df_sub %>%
     group_by(Version) %>%
     mutate(
@@ -201,7 +212,8 @@ plot_metric <- function(metric_type, df = metrics_long) {
       upper_whisker = Q3 + 1.5 * IQR_val,
       lower_whisker = Q1 - 1.5 * IQR_val,
       is_outlier = Value > upper_whisker | Value < lower_whisker
-    )
+    ) %>%
+    ungroup()
   
   # Plot
   ggplot(df_outliers, aes(x = Version, y = Value)) +
@@ -212,6 +224,7 @@ plot_metric <- function(metric_type, df = metrics_long) {
               hjust = -0.3, color = "red", size = 3.5) +
     scale_color_manual(values = c("black", "red"), guide = "none") +
     labs(title = paste(metric_type, ": Opt vs All Simulated Trajectories"),
+         subtitle = test_label,
          y = metric_type, x = "") +
     theme_minimal()
 }

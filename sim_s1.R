@@ -7,9 +7,9 @@ library(purrr)
 library(parallel)
 library(fda)
 begin = Sys.time()
-source("C:/Users/sonnet/Box/FDA/Dynamic-Modeling-of-Functional-Snippets-main/code/ldm.R")
-source("C:/Users/sonnet/Box/FDA/Dynamic-Modeling-of-Functional-Snippets-main/code/kerFctn.R")
-source("C:/Users/sonnet/Box/FDA/FDA_paper/Rfunctions.R")
+source("~/FDA_with_accelerated_longitudinal_designs/ldm.R")
+source("~/FDA_with_accelerated_longitudinal_designs/kerFctn.R")
+source("~/FDA_with_accelerated_longitudinal_designs/Rfunctions.R")
 
 sim_S1 <- function(method, rep_cond, iter) {
   set.seed(iter)
@@ -25,13 +25,6 @@ sim_S1 <- function(method, rep_cond, iter) {
   
   # Generate initial values depending on method
   if (method == "normal") {
-    z0 <- generate_initial_values(
-      Lt_list = sim_al_data$Lt,
-      Ly_list = sim_al_data$Ly,
-      age_grid = age,
-      m = 1,
-      method = "normal"
-    )
     z02 <- generate_initial_values(
       Lt_list = sim_al_data$Lt,
       Ly_list = sim_al_data$Ly,
@@ -40,13 +33,6 @@ sim_S1 <- function(method, rep_cond, iter) {
       method = "normal"
     )
   } else if (method == "replicate") {
-    z0 <- generate_initial_values(
-      Lt_list = sim_data$Lt_true,
-      Ly_list = sim_data$Ly_true,
-      age_grid = age,
-      m = 1,
-      method = "replicate"
-    )
     z02 <- generate_initial_values(
       Lt_list = sim_data$Lt_true,
       Ly_list = sim_data$Ly_true,
@@ -59,22 +45,16 @@ sim_S1 <- function(method, rep_cond, iter) {
   }
   
   # Fit models
-  acd_fda <- ldm(sim_al_data$Ly, sim_al_data$Lt, z0, age,
-                 optns = list(M = nrow(z0), cores = 24)
-  )
-  
   acd_fda_2 <- ldm(sim_al_data$Ly, sim_al_data$Lt, z02, age,
                    optns = list(
                      M = nrow(z02),
-                     bw1 = acd_fda$optns$bw1,
-                     bw2 = acd_fda$optns$bw2,
                      regular = FALSE, cores = 24
                    )
   )
   
   # Evaluate final model
   results <- evaluate_simulations(tfine = tfine, sim_al_data = sim_al_data, sim_data = sim_data, acd_fda_2 = acd_fda_2)
-  rm(sim_data, sim_al_data, acd_fda, acd_fda_2)
+  rm(sim_data, sim_al_data, acd_fda_2)
   
   # Return results
   return(list(
@@ -90,8 +70,8 @@ sim_S1 <- function(method, rep_cond, iter) {
 }
 
 methods <- c("normal", "replicate")
-rep_conds <- c(4,10,100)
-iters <- 1:20
+rep_conds <- c(4, 10, 100)
+iters <- 11:20
 
 # Initialize result tibble
 result_tbl <- tibble(iter = iters)
@@ -122,8 +102,8 @@ for (method in methods) {
   }
 }
 
-saveRDS(result_tbl, file = "C:/Users/sonnet/Box/FDA/FDA_paper/result_tbl")
-result_tbl <- readRDS(file = "C:/Users/sonnet/Box/FDA/FDA_paper/result_tbl")
+saveRDS(result_tbl, file = "~/FDA_with_accelerated_longitudinal_designs/result_tbl2")
+result_tbl2 <- readRDS(file = "~/FDA_with_accelerated_longitudinal_designs/result_tbl2")
 
 end = Sys.time()
 end - begin

@@ -118,7 +118,7 @@ generate_initial_values <- function(Lt_list, Ly_list, age_grid, m = 1, method = 
   Ly_unlisted <- unlist(Ly_list)
   
   # Values where time is (almost) zero
-  Ly_at_t0 <- Ly_unlisted[abs(Lt_unlisted - 0) < eps]
+  Ly_at_t0 <- Ly_unlisted[abs(Lt_unlisted - age_grid[1]) < eps]
   
   # If no exact or near-zero match, find closest one
   if (length(Ly_at_t0) == 0) {
@@ -230,38 +230,33 @@ plot_metric <- function(metric_type, df = metrics_long) {
 }
 
 evaluate_simulations <- function(tfine, sim_al_data, sim_data, acd_fda_2, plot = FALSE, plot_subjects = NULL) {
-
+  
   # --- Step 1: Setup grid and basis ---
   n_obs <- tfine[length(tfine)]
-  Y_estimated <- acd_fda_2$path   # dim: subjects × time points
-  time_est <- seq(0, n_obs, length.out = ncol(Y_estimated))  # 1 × T
+  Y_estimated <- acd_fda_2$path
+  time_est <- seq(tfine[1], n_obs, length.out = ncol(Y_estimated))
   
-  # --- Step 2: Smooth each subject using smooth.spline ---
+  # --- Step 2: Smooth each subject ---
   n_subjects <- nrow(Y_estimated)
   fd_eval_mat <- matrix(NA, nrow = length(tfine), ncol = n_subjects)
-  
-  error_count <- 0  # Counter for errors
+  error_count <- 0
   
   for (i in 1:n_subjects) {
     y <- Y_estimated[i, ]
-    
     tryCatch({
       smooth_fit <- smooth.spline(x = time_est, y = y, cv = FALSE)
       fd_eval_mat[, i] <- predict(smooth_fit, x = tfine)$y
     }, error = function(e) {
-      error_count <<- error_count + 1  # Increment error counter
+      error_count <<- error_count + 1
     })
   }
-  
-  # Final message
   if (error_count > 0) {
     message("  Skipped ", error_count, " simulated trajectories due to smooth.spline errors.")
   }
   
-  # Calculate mean of the simulated trajectories
   mean_fd <- rowMeans(fd_eval_mat, na.rm = TRUE)
   
-  # Step 3: Match and compute Ly_sim and Ly_sim_avg
+  # Step 3: Matching and simulated fits
   age_grid <- tfine
   n_sim <- ncol(fd_eval_mat)
   n_sub <- length(sim_al_data$Ly)
@@ -276,106 +271,146 @@ evaluate_simulations <- function(tfine, sim_al_data, sim_data, acd_fda_2, plot =
   for (i in seq_len(n_sub)) {
     obs_time <- sim_al_data$Lt[[i]]
     obs_vals <- sim_al_data$Ly[[i]]
-    pos <- match(round(obs_time, 3), round(age_grid, 3))
+    if (length(obs_vals) == 0 && is.numeric(obs_vals)) {
+      # Assign NA and skip if obs_vals is numeric(0)
+      Ly_sim[[i]] <- NA
+      Ly_sim_avg[[i]] <- NA
+      mse_vec[i] <- NA
+      bias_vec[i] <- NA
+      mse_all[i] <- NA
+      bias_all[i] <- NA
+      next
+    }
+    pos <- sapply(obs_time, function(t) {
+      rounded_grid <- round(age_grid, 3)
+      idx <- which(rounded_grid == round(t, 3))
+      
+      if (length(idx) > 0) {
+        return(idx[1])
+      } else {
+        # Find the closest two neighbors
+        diffs <- rounded_grid - round(t, 3)
+        before <- max(which(diffs < 0))
+        after <- min(which(diffs > 0))
+        
+        if (!is.na(before) && !is.na(after)) {
+          # Randomly select between before and after
+          return(sample(c(before, after), 1))
+        } else if (!is.na(before)) {
+          return(before)
+        } else if (!is.na(after)) {
+          return(after)
+        } else {
+          return(NA_integer_)
+        }
+      }
+    })
     
     sim_vals <- fd_eval_mat[pos, ]
     sim_mean_vals <- mean_fd[pos]
     
-    # Compute subject-wise MSEs across all sim trajectories
+    if (length(obs_vals) == 1) {
+      # Not enough data to compute meaningful metrics
+      Ly_sim[[i]] <- NA
+      Ly_sim_avg[[i]] <- NA
+      mse_vec[i] <- NA
+      bias_vec[i] <- NA
+      mse_all[i] <- NA
+      bias_all[i] <- NA
+      next
+    } 
+    
     mse <- colMeans((sim_vals - obs_vals)^2)
     sorted_idx <- order(mse)
-    
-    # Get incremental MSE and elbow index
     inc_mse <- compute_incremental_avg_mse(sim_vals, obs_vals)
     elbow_index <- inc_mse$elbow_index
     top_idx <- sorted_idx[1:elbow_index]
     
-    # Store simulations and average
     Ly_sim[[i]] <- fd_eval_mat[, top_idx]
     Ly_sim_avg[[i]] <- rowMeans(Ly_sim[[i]])
-    
-    # Store optimized MSE and bias
     mse_vec[i] <- inc_mse$cumulative_avg_mse[elbow_index]
     bias_vec[i] <- mean(obs_vals - rowMeans(sim_vals[, top_idx, drop = FALSE]))
-    
-    # Store MSE and bias from overall mean_fd
     mse_all[i] <- mean((sim_mean_vals - obs_vals)^2)
     bias_all[i] <- mean(obs_vals - sim_mean_vals)
   }
   
-  # --- Step 4a: ISE computation ---
-  calc_ise <- function(true_phi, est_phi) {
-    if (is.vector(true_phi)) true_phi <- matrix(true_phi, ncol = 1)
-    if (is.vector(est_phi)) est_phi <- matrix(est_phi, ncol = 1)
-    sapply(1:ncol(true_phi), function(j) {
-      diff_sq <- (est_phi[, j] - true_phi[, j])^2
-      trapz(tfine, diff_sq)
+  # Initialize ISE/IE variables
+  ise_vec <- NULL
+  ise_all <- NULL
+  ie_vec <- NULL
+  ie_all <- NULL
+  
+  if (!is.null(sim_data)) {
+    # Step 4a: ISE
+    calc_ise <- function(true_phi, est_phi) {
+      if (is.vector(true_phi)) true_phi <- matrix(true_phi, ncol = 1)
+      if (is.vector(est_phi)) est_phi <- matrix(est_phi, ncol = 1)
+      sapply(1:ncol(true_phi), function(j) {
+        diff_sq <- (est_phi[, j] - true_phi[, j])^2
+        trapz(tfine, diff_sq)
+      })
+    }
+    ise_vec <- sapply(seq_along(Ly_sim_avg), function(i) {
+      est_phi <- Ly_sim_avg[[i]]
+      true_phi <- sim_data$Y_no_noise[, i]
+      calc_ise(true_phi, est_phi)
     })
+    mean_fd_mat <- matrix(mean_fd, nrow = length(tfine), ncol = ncol(sim_data$Y_no_noise))
+    ise_all <- calc_ise(sim_data$Y_no_noise, mean_fd_mat)
+    
+    # Step 4b: IE
+    calc_ie <- function(true_phi, est_phi) {
+      if (is.vector(true_phi)) true_phi <- matrix(true_phi, ncol = 1)
+      if (is.vector(est_phi)) est_phi <- matrix(est_phi, ncol = 1)
+      sapply(1:ncol(true_phi), function(j) {
+        diff <- true_phi[, j] - est_phi[, j]
+        trapz(tfine, diff)
+      })
+    }
+    ie_vec <- sapply(seq_along(Ly_sim_avg), function(i) {
+      est_phi <- Ly_sim_avg[[i]]
+      true_phi <- sim_data$Y_no_noise[, i]
+      calc_ie(true_phi, est_phi)
+    })
+    ie_all <- calc_ie(sim_data$Y_no_noise, mean_fd_mat)
   }
   
-  ise_vec <- sapply(seq_along(Ly_sim_avg), function(i) {
-    est_phi <- Ly_sim_avg[[i]]
-    true_phi <- sim_data$Y_no_noise[, i]
-    calc_ise(true_phi, est_phi)
-  })
-  
-  mean_fd_mat <- matrix(mean_fd, nrow = length(tfine), ncol = ncol(sim_data$Y_no_noise))
-  ise_all <- calc_ise(true_phi = sim_data$Y_no_noise, est_phi = mean_fd_mat)
-
-  # --- Step 4b: IE computation ---
-  calc_ie <- function(true_phi, est_phi) {
-    if (is.vector(true_phi)) true_phi <- matrix(true_phi, ncol = 1)
-    if (is.vector(est_phi)) est_phi <- matrix(est_phi, ncol = 1)
-    sapply(1:ncol(true_phi), function(j) {
-      diff <- true_phi[, j] - est_phi[, j]
-      trapz(tfine, diff)
-    })
-  }
-  
-  ie_vec <- sapply(seq_along(Ly_sim_avg), function(i) {
-    est_phi <- Ly_sim_avg[[i]]
-    true_phi <- sim_data$Y_no_noise[, i]
-    calc_ie(true_phi, est_phi)
-  })
-
-  ie_all <- calc_ie(true_phi = sim_data$Y_no_noise, est_phi = mean_fd_mat)
-
   # --- Step 5: Plots ---
   if (plot) {
+    matplot(tfine, fd_eval_mat, type = "l", lty = 1, xlab = "Age", ylab = "Value", main = "Smoothed Estimated Trajectories")
     
-    # --- Plot smoothed trajectories ---
-    matplot(tfine, fd_eval_mat, type = "l", lty = 1, 
-            xlab = "Age", ylab = "Value", main = "Smoothed Estimated Trajectories")
-    
-    # --- Subject-level trajectory plots ---
     if (is.null(plot_subjects)) {
-      plot_subjects <- sample(seq_along(Ly_sim), 5)
+      valid_indices <- which(sapply(Ly_sim, function(x) length(x) > 1))
+      plot_subjects <- sample(valid_indices, 5)
     }
     
     for (i in plot_subjects) {
       sim_trajs <- Ly_sim[[i]]
-      true_traj <- sim_data$Y_no_noise[, i]
+      avg_traj <- Ly_sim_avg[[i]]
       sparse_time <- sim_al_data$Lt[[i]]
       sparse_vals <- sim_al_data$Ly[[i]]
-      avg_traj <- Ly_sim_avg[[i]]
+      obs_df <- data.frame(Time = sparse_time, Value = sparse_vals)
+      avg_df <- data.frame(Time = age_grid, Value = avg_traj)
       
       sim_df <- as.data.frame(sim_trajs)
       sim_df$Time <- age_grid
       sim_long <- pivot_longer(sim_df, -Time, names_to = "Trajectory", values_to = "Value")
-      true_df <- data.frame(Time = age_grid, Value = true_traj)
-      obs_df <- data.frame(Time = sparse_time, Value = sparse_vals)
-      avg_df <- data.frame(Time = age_grid, Value = avg_traj)
       
       p <- ggplot() +
-        geom_line(data = sim_long, aes(x = Time, y = Value, group = Trajectory),
-                  color = "steelblue", alpha = 0.4) +
-        geom_line(data = true_df, aes(x = Time, y = Value, color = "True"), size = 1) +
-        geom_line(data = avg_df, aes(x = Time, y = Value, color = "Avg Simulated"), size = 1) +
+        geom_line(data = sim_long, aes(x = Time, y = Value, group = Trajectory), color = "steelblue", alpha = 0.4) +
         geom_point(data = obs_df, aes(x = Time, y = Value, color = "Observed"), size = 2) +
-        labs(title = paste("Subject", i, ": Simulated Trajectories, True, Observed, and Average"),
+        geom_line(data = avg_df, aes(x = Time, y = Value, color = "Avg Simulated"), size = 1)
+      
+      if (!is.null(sim_data)) {
+        true_df <- data.frame(Time = age_grid, Value = sim_data$Y_no_noise[, i])
+        p <- p + geom_line(data = true_df, aes(x = Time, y = Value, color = "True"), size = 1)
+      }
+      
+      p <- p +
+        labs(title = paste("Subject", i, ": Simulated Trajectories"),
              x = "Age", y = "Value", color = "Legend") +
-        theme_minimal() +
         scale_color_manual(values = c("True" = "red", "Avg Simulated" = "blue", "Observed" = "black")) +
+        theme_minimal() +
         theme(legend.position = "bottom")
       
       print(p)
@@ -383,31 +418,33 @@ evaluate_simulations <- function(tfine, sim_al_data, sim_data, acd_fda_2, plot =
     
     # --- Step 6: SE summary boxplot ---
     metrics_df <- data.frame(
-      subject = seq_along(ie_vec),
-      IE_Opt = ie_vec,
-      IE_All = ie_all,
-      ISE_Opt = ise_vec,
-      ISE_All = ise_all,
+      subject = seq_len(n_sub),
       MSE_Opt = mse_vec,
       MSE_All = mse_all,
       Bias_Opt = bias_vec,
       Bias_All = bias_all
     )
     
-    # Convert to long format for grouped plotting
+    if (!is.null(sim_data)) {
+      metrics_df$IE_Opt <- ie_vec
+      metrics_df$IE_All <- ie_all
+      metrics_df$ISE_Opt <- ise_vec
+      metrics_df$ISE_All <- ise_all
+    }
+    
     metrics_long <- metrics_df %>%
       pivot_longer(-subject, names_to = "Metric", values_to = "Value") %>%
       separate(Metric, into = c("Metric_Type", "Version"), sep = "_")
     
-    print(plot_metric("ISE", df = metrics_long))
-    print(plot_metric("IE", df = metrics_long))
+    if (!is.null(sim_data)) {
+      print(plot_metric("ISE", df = metrics_long))
+      print(plot_metric("IE", df = metrics_long))
+    }
+    
     print(plot_metric("MSE", df = metrics_long))
     print(plot_metric("Bias", df = metrics_long))
-    
   }
   
-  
-  # --- Return results ---
   return(list(
     Ly_sim = Ly_sim,
     Ly_sim_avg = Ly_sim_avg,
@@ -421,4 +458,3 @@ evaluate_simulations <- function(tfine, sim_al_data, sim_data, acd_fda_2, plot =
     bias_all = bias_all
   ))
 }
-

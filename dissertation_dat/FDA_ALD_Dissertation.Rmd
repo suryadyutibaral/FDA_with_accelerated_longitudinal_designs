@@ -2,7 +2,9 @@
 title: "ALD_FDA_Dissertation"
 author: "Suryadyuti Baral"
 date: "`r Sys.Date()`"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ### GF
@@ -15,8 +17,8 @@ ald_dat <- fread("~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/D
 response_vars <- c("GF1", "GF2")
 time_vars <- c("age1", "age2")
 
-# Remove rows where any age < 5 and >27
-valid_indices <- apply(ald_dat[, ..time_vars], 1, function(row) all(is.na(row) | row >= 5 & row <= 27))
+# Remove rows where any age < 5 and >22
+valid_indices <- apply(ald_dat[, ..time_vars], 1, function(row) all(is.na(row) | row >= 5 & row <= 22))
 ald_dat <- ald_dat[valid_indices]
 
 # Construct Lt and Ly using lapply (with -500 shift)
@@ -43,7 +45,7 @@ source("~/FDA_with_accelerated_longitudinal_designs/Rfunctions.R")
 
 # Fit model with regular time grid
 set.seed(1)
-age <- 5:27
+age <- 5:22
 z02 <- generate_initial_values(Lt_list = Lt, Ly_list = Ly, age_grid = age, m = 4, method = "normal")
 acd_fda_2 <- ldm(Ly, Lt, z02, age, optns = list(M = nrow(z02), cores = 24, regular = FALSE))
 
@@ -53,7 +55,7 @@ saveRDS(acd_fda_2, file = "~/FDA_with_accelerated_longitudinal_designs/dissertat
 
 ```{r}
 # 1. Round time names from rownames of Y_full
-time_names <- round(seq(5,27, length.out = 23*12), 3)
+time_names <- round(seq(5,22, length.out = 18*12), 3)
 x_rounded <- round(age, 3)
 unique_times <- sort(unique(x_rounded))
 
@@ -92,7 +94,7 @@ ggplot(df_all, aes(x = Time, y = y, group = Subject, color = group)) +
 
 
 ```{r}
-results <- evaluate_simulations(tfine = seq(5,27, length.out = 23*12), sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL, acd_fda_2 = acd_fda_2, plot = TRUE)
+results <- evaluate_simulations(tfine = seq(5,22, length.out = 18*12), sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL, acd_fda_2 = acd_fda_2, plot = TRUE)
 ```
 
 
@@ -101,7 +103,7 @@ library(fdapace)
 library(fda)
 
 curve_matrix <- as.matrix(acd_fda_2$path)
-age_grid <- 5:27
+age_grid <- 5:22
 Lt_age <- replicate(nrow(curve_matrix), age_grid, simplify = FALSE)
 Ly <- split(curve_matrix, row(curve_matrix))
 fpca_acd<-FPCA(Ly, Lt_age)
@@ -120,8 +122,8 @@ plot(fpca_acd1)
 ald_dat <- fread("C:/Users/sonnet/Box/FDA/Emilio_dissertation/Dissertation_Selection.csv", na.strings = ".")
 response_vars <- c("GAK1", "GAK2")
 
-# Remove rows where any age < 5 and >27
-valid_indices <- apply(ald_dat[, ..time_vars], 1, function(row) all(is.na(row) | row >= 5 & row <= 27))
+# Remove rows where any age < 5 and >22
+valid_indices <- apply(ald_dat[, ..time_vars], 1, function(row) all(is.na(row) | row >= 5 & row <= 22))
 ald_dat <- ald_dat[valid_indices]
 
 # Construct Lt and Ly using lapply (with -500 shift)
@@ -143,7 +145,7 @@ sort(unique_ages)
 ```{r}
 # Fit model with regular time grid
 set.seed(1)
-age <- 5:27
+age <- 5:22
 z02 <- generate_initial_values(Lt_list = Lt, Ly_list = Ly, age_grid = age, m = 4, method = "normal")
 acd_fda_2 <- ldm(Ly, Lt, z02, age, optns = list(M = nrow(z02), cores = 24, regular = FALSE))
 
@@ -153,7 +155,7 @@ saveRDS(acd_fda_2, file = "~/FDA_with_accelerated_longitudinal_designs/dissertat
 
 ```{r}
 # 1. Round time names from rownames of Y_full
-time_names <- round(seq(5,27, length.out = 23*12), 3)
+time_names <- round(seq(5,22, length.out = 18*12), 3)
 x_rounded <- round(age, 3)
 unique_times <- sort(unique(x_rounded))
 
@@ -192,7 +194,7 @@ ggplot(df_all, aes(x = Time, y = y, group = Subject, color = group)) +
 
 
 ```{r}
-results <- evaluate_simulations(tfine = seq(5,27, length.out = 23*12), sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL, acd_fda_2 = acd_fda_2, plot = TRUE)
+results <- evaluate_simulations(tfine = seq(5,22, length.out = 18*12), sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL, acd_fda_2 = acd_fda_2, plot = TRUE)
 ```
 
 ```{r eval=FALSE, include=FALSE}
@@ -200,7 +202,7 @@ library(fdapace)
 library(fda)
 
 curve_matrix <- as.matrix(acd_fda_2$path)
-age_grid <- 5:27
+age_grid <- 5:22
 Lt_age <- replicate(nrow(curve_matrix), age_grid, simplify = FALSE)
 Ly <- split(curve_matrix, row(curve_matrix))
 fpca_acd<-FPCA(Ly, Lt_age)
@@ -219,8 +221,8 @@ plot(fpca_acd1)
 ald_dat <- fread("C:/Users/sonnet/Box/FDA/Emilio_dissertation/Dissertation_Selection.csv", na.strings = ".")
 response_vars <- c("GC1", "GC2")
 
-# Remove rows where any age < 5 and >27
-valid_indices <- apply(ald_dat[, ..time_vars], 1, function(row) all(is.na(row) | row >= 5 & row <= 27))
+# Remove rows where any age < 5 and >22
+valid_indices <- apply(ald_dat[, ..time_vars], 1, function(row) all(is.na(row) | row >= 5 & row <= 22))
 ald_dat <- ald_dat[valid_indices]
 
 # Construct Lt and Ly using lapply (with -500 shift)
@@ -242,7 +244,7 @@ sort(unique_ages)
 ```{r}
 # Fit model with regular time grid
 set.seed(1)
-age <- 5:27
+age <- 5:22
 z02 <- generate_initial_values(Lt_list = Lt, Ly_list = Ly, age_grid = age, m = 4, method = "normal")
 acd_fda_2 <- ldm(Ly, Lt, z02, age, optns = list(M = nrow(z02), cores = 24, regular = FALSE))
 
@@ -252,7 +254,7 @@ saveRDS(acd_fda_2, file = "~/FDA_with_accelerated_longitudinal_designs/dissertat
 
 ```{r}
 # 1. Round time names from rownames of Y_full
-time_names <- round(seq(5,27, length.out = 23*12), 3)
+time_names <- round(seq(5,22, length.out = 18*12), 3)
 x_rounded <- round(age, 3)
 unique_times <- sort(unique(x_rounded))
 
@@ -291,7 +293,7 @@ ggplot(df_all, aes(x = Time, y = y, group = Subject, color = group)) +
 
 
 ```{r}
-results <- evaluate_simulations(tfine = seq(5,27, length.out = 23*12), sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL, acd_fda_2 = acd_fda_2, plot = TRUE)
+results <- evaluate_simulations(tfine = seq(5,22, length.out = 18*12), sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL, acd_fda_2 = acd_fda_2, plot = TRUE)
 ```
 
 ```{r eval=FALSE, include=FALSE}
@@ -299,7 +301,7 @@ library(fdapace)
 library(fda)
 
 curve_matrix <- as.matrix(acd_fda_2$path)
-age_grid <- 5:27
+age_grid <- 5:22
 Lt_age <- replicate(nrow(curve_matrix), age_grid, simplify = FALSE)
 Ly <- split(curve_matrix, row(curve_matrix))
 fpca_acd<-FPCA(Ly, Lt_age, list(useBinnedData = "OFF"))
@@ -318,7 +320,7 @@ plot(fpca_acd1)
 ald_dat <- fread("C:/Users/sonnet/Box/FDA/Emilio_dissertation/Dissertation_Selection.csv", na.strings = ".")
 response_vars <- c("GQ1", "GQ2")
 
-# Remove rows where any age < 5 and >27
+# Remove rows where any age < 5 and >22
 valid_indices <- apply(ald_dat[, ..time_vars], 1, function(row) all(is.na(row) | row >= 5 & row <= 22))
 ald_dat <- ald_dat[valid_indices]
 
@@ -398,7 +400,7 @@ library(fdapace)
 library(fda)
 
 curve_matrix <- as.matrix(acd_fda_2$path)
-age_grid <- 5:27
+age_grid <- 5:22
 Lt_age <- replicate(nrow(curve_matrix), age_grid, simplify = FALSE)
 Ly <- split(curve_matrix, row(curve_matrix))
 fpca_acd<-FPCA(Ly, Lt_age)

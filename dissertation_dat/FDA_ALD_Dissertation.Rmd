@@ -9,7 +9,7 @@ output: html_document
 
 ```{r}
 library(data.table)
-ald_dat <- fread("C:/Users/sonnet/Box/FDA/Emilio_dissertation/Dissertation_Selection.csv", na.strings = ".")
+ald_dat <- fread("~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/Dissertation_Selection.csv", na.strings = ".")
 
 # Setup
 response_vars <- c("GF1", "GF2")
@@ -37,72 +37,66 @@ sort(unique_ages)
 
 ```{r}
 # Load model code
-source("C:/Users/sonnet/Box/FDA/Dynamic-Modeling-of-Functional-Snippets-main/code/ldm.R")
-source("C:/Users/sonnet/Box/FDA/Dynamic-Modeling-of-Functional-Snippets-main/code/kerFctn.R")
+source("~/FDA_with_accelerated_longitudinal_designs/ldm.R")
+source("~/FDA_with_accelerated_longitudinal_designs/kerFctn.R")
+source("~/FDA_with_accelerated_longitudinal_designs/Rfunctions.R")
 
 # Fit model with regular time grid
 set.seed(1)
 age <- 5:27
-M <- length(first_fr_scores)
-acd_fda <- ldm(Ly, Lt, z0 = c(-59, 5), age, optns = list(M = M))
-n_subj <- length(Ly)
+z02 <- generate_initial_values(Lt_list = Lt, Ly_list = Ly, age_grid = age, m = 4, method = "normal")
+acd_fda_2 <- ldm(Ly, Lt, z02, age, optns = list(M = nrow(z02), cores = 24, regular = FALSE))
 
-df <- data.frame(
-  Age = c(unlist(Lt), rep(age, M)),
-  Value = c(unlist(Ly), as.vector(t(acd_fda$path))),
-  id = rep(1:(n_subj + M), c(sapply(Lt, length), rep(length(age), M))),
-  group = factor(rep(c("Observed snippets", "Estimated growth curves"),
-                     c(sum(sapply(Lt, length)), M * length(age))),
-                 levels = c("Observed snippets", "Estimated growth curves"))
-)
-
-library(ggplot2)
-ggplot(data = df, aes(x = Age, y = Value, group = id)) +
-  geom_line(data = subset(df, group == "Observed snippets"), 
-            aes(color = group), linewidth = 0.4) +
-  geom_line(data = subset(df, group == "Estimated growth curves"), 
-            aes(color = group), alpha = 0.2, linewidth = 0.4) +
-  scale_color_manual(values = c("#B47846", "steelblue")) +
-  labs(x = "Age", y = "Functional Value", color = "Group") +
-  theme_bw() +
-  theme(text = element_text(size = 16))
-
-# Save model
-saveRDS(acd_fda, file = "C:/Users/sonnet/Box/FDA/Emilio_dissertation/GF_dissertation_ALD_1_sim_curves.rds")
-acd_fda <- readRDS(file = "C:/Users/sonnet/Box/FDA/Emilio_dissertation/GF_dissertation_ALD_1_sim_curves.rds")
+saveRDS(acd_fda_2, file = "~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/GF_dissertation_ALD_sim_curves.rds")
 ```
 
 
 ```{r}
-# Fit with irregular design using previous bandwidths
-z0_fr <- cbind(sample(seq(-59, -34, length.out = M*100), replace = TRUE), age[1])
-acd_fda_2 <- ldm(Ly, Lt, z0_fr, age, optns = list(M = M*100, bw1 = acd_fda$optns$bw1, 
-                                                  bw2 = acd_fda$optns$bw2, regular = FALSE))
-saveRDS(acd_fda_2, file = "C:/Users/sonnet/Box/FDA/Emilio_dissertation/GF_dissertation_ALD_100_sim_curves.rds")
+# 1. Round time names from rownames of Y_full
+time_names <- round(seq(5,27, length.out = 23*12), 3)
+x_rounded <- round(age, 3)
+unique_times <- sort(unique(x_rounded))
 
-# Plotting
-n_subj <- length(Ly)
-df <- data.frame(
-  Age = c(unlist(Lt), rep(age, M*100)),
-  Value = c(unlist(Ly), as.vector(t(acd_fda_2$path))),
-  id = rep(1:(n_subj + M*100), c(sapply(Lt, length), rep(length(age), M*100))),
-  group = factor(rep(c("Observed snippets", "Estimated growth curves"),
-                     c(sum(sapply(Lt, length)), M*100 * length(age))),
-                 levels = c("Observed snippets", "Estimated growth curves"))
-)
+# 2. For each unique time in age, find the first matching index in time_names
+matching_indices <- sapply(unique_times, function(t) {
+  match(t, time_names)  # match returns the first occurrence
+})
 
-ggplot(df, aes(x = Age, y = Value, group = id)) +
-  geom_line(data = subset(df, group == "Estimated growth curves"),
-            aes(color = group), alpha = 0.1, linewidth = 0.4) +
-  geom_line(data = subset(df, group == "Observed snippets"),
-            aes(color = group), linewidth = 0.4) +
-  scale_color_manual(values = c("steelblue", "#B47846")) +
-  labs(x = "Age", y = "Functional Value", color = "Group") +
-  theme_bw(base_size = 16)
+# 5. Estimated trajectories from acd_fda$path
+est_df <- as.data.frame(t(acd_fda_2$path)) %>%
+  mutate(Time = age) %>%
+  pivot_longer(-Time, names_to = "Subject", values_to = "y") %>%
+  mutate(group = "Estimated")
+
+# 6. (Optional) Observed snippets from sim_al_data$Ly
+obs_df <- map2_dfr(Ly, Lt,
+                   ~ tibble(Time = .y, y = .x),
+                   .id = "Subject") %>%
+  mutate(group = "Observed")
+
+# 7. Combine all
+df_all <- bind_rows(est_df, obs_df)
+
+# 8. Plot
+ggplot(df_all, aes(x = Time, y = y, group = Subject, color = group)) +
+  geom_line(data = filter(df_all, group == "Estimated"), 
+            alpha = 0.4, linewidth = 0.4) +
+  geom_line(data = filter(df_all, group == "Observed"), 
+            linewidth = 0.4) +
+  scale_color_manual(values = c("Estimated" = "steelblue",
+                                "Observed" = "red")) +
+  labs(x = "Time", y = "Functional Value", color = "Trajectory Type",
+       title = "Accelerated Longitudinal Sampling: \n True vs Estimated vs Observed") +
+  theme_minimal(base_size = 14)
 ```
 
 
 ```{r}
+results <- evaluate_simulations(tfine = seq(5,27, length.out = 23*12), sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL, acd_fda_2 = acd_fda_2, plot = TRUE)
+```
+
+
+```{r eval=FALSE, include=FALSE}
 library(fdapace)
 library(fda)
 
@@ -150,63 +144,58 @@ sort(unique_ages)
 # Fit model with regular time grid
 set.seed(1)
 age <- 5:27
-M <- length(first_fr_scores)
-acd_fda <- ldm(Ly, Lt, z0 = c(-45, 5), age, optns = list(M = M))
-n_subj <- length(Ly)
+z02 <- generate_initial_values(Lt_list = Lt, Ly_list = Ly, age_grid = age, m = 4, method = "normal")
+acd_fda_2 <- ldm(Ly, Lt, z02, age, optns = list(M = nrow(z02), cores = 24, regular = FALSE))
 
-df <- data.frame(
-  Age = c(unlist(Lt), rep(age, M)),
-  Value = c(unlist(Ly), as.vector(t(acd_fda$path))),
-  id = rep(1:(n_subj + M), c(sapply(Lt, length), rep(length(age), M))),
-  group = factor(rep(c("Observed snippets", "Estimated growth curves"),
-                     c(sum(sapply(Lt, length)), M * length(age))),
-                 levels = c("Observed snippets", "Estimated growth curves"))
-)
-
-library(ggplot2)
-ggplot(data = df, aes(x = Age, y = Value, group = id)) +
-  geom_line(data = subset(df, group == "Observed snippets"), 
-            aes(color = group), linewidth = 0.4) +
-  geom_line(data = subset(df, group == "Estimated growth curves"), 
-            aes(color = group), alpha = 0.2, linewidth = 0.4) +
-  scale_color_manual(values = c("#B47846", "steelblue")) +
-  labs(x = "Age", y = "Functional Value", color = "Group") +
-  theme_bw() +
-  theme(text = element_text(size = 16))
-# Save model
-saveRDS(acd_fda, file = "C:/Users/sonnet/Box/FDA/Emilio_dissertation/GAK_dissertation_ALD_1_sim_curves.rds")
+saveRDS(acd_fda_2, file = "~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/GAK_dissertation_ALD_sim_curves.rds")
 ```
 
 
 ```{r}
-# Fit with irregular design using previous bandwidths
-z0_fr <- cbind(sample(seq(-69, -31, length.out = M*100), replace = TRUE), age[1])
-acd_fda_2 <- ldm(Ly, Lt, z0_fr, age, optns = list(M = M*100, bw1 = acd_fda$optns$bw1, 
-                                                  bw2 = acd_fda$optns$bw2, regular = FALSE))
-saveRDS(acd_fda_2, file = "C:/Users/sonnet/Box/FDA/Emilio_dissertation/GAK_dissertation_ALD_100_sim_curves.rds")
+# 1. Round time names from rownames of Y_full
+time_names <- round(seq(5,27, length.out = 23*12), 3)
+x_rounded <- round(age, 3)
+unique_times <- sort(unique(x_rounded))
 
-# Plotting
-n_subj <- length(Ly)
-df <- data.frame(
-  Age = c(unlist(Lt), rep(age, M*100)),
-  Value = c(unlist(Ly), as.vector(t(acd_fda_2$path))),
-  id = rep(1:(n_subj + M*100), c(sapply(Lt, length), rep(length(age), M*100))),
-  group = factor(rep(c("Observed snippets", "Estimated growth curves"),
-                     c(sum(sapply(Lt, length)), M*100 * length(age))),
-                 levels = c("Observed snippets", "Estimated growth curves"))
-)
+# 2. For each unique time in age, find the first matching index in time_names
+matching_indices <- sapply(unique_times, function(t) {
+  match(t, time_names)  # match returns the first occurrence
+})
 
-ggplot(df, aes(x = Age, y = Value, group = id)) +
-  geom_line(data = subset(df, group == "Estimated growth curves"),
-            aes(color = group), alpha = 0.1, linewidth = 0.4) +
-  geom_line(data = subset(df, group == "Observed snippets"),
-            aes(color = group), linewidth = 0.4) +
-  scale_color_manual(values = c("steelblue", "#B47846")) +
-  labs(x = "Age", y = "Functional Value", color = "Group") +
-  theme_bw(base_size = 16)
+# 5. Estimated trajectories from acd_fda$path
+est_df <- as.data.frame(t(acd_fda_2$path)) %>%
+  mutate(Time = age) %>%
+  pivot_longer(-Time, names_to = "Subject", values_to = "y") %>%
+  mutate(group = "Estimated")
+
+# 6. (Optional) Observed snippets from sim_al_data$Ly
+obs_df <- map2_dfr(Ly, Lt,
+                   ~ tibble(Time = .y, y = .x),
+                   .id = "Subject") %>%
+  mutate(group = "Observed")
+
+# 7. Combine all
+df_all <- bind_rows(est_df, obs_df)
+
+# 8. Plot
+ggplot(df_all, aes(x = Time, y = y, group = Subject, color = group)) +
+  geom_line(data = filter(df_all, group == "Estimated"), 
+            alpha = 0.4, linewidth = 0.4) +
+  geom_line(data = filter(df_all, group == "Observed"), 
+            linewidth = 0.4) +
+  scale_color_manual(values = c("Estimated" = "steelblue",
+                                "Observed" = "red")) +
+  labs(x = "Time", y = "Functional Value", color = "Trajectory Type",
+       title = "Accelerated Longitudinal Sampling: \n True vs Estimated vs Observed") +
+  theme_minimal(base_size = 14)
 ```
 
+
 ```{r}
+results <- evaluate_simulations(tfine = seq(5,27, length.out = 23*12), sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL, acd_fda_2 = acd_fda_2, plot = TRUE)
+```
+
+```{r eval=FALSE, include=FALSE}
 library(fdapace)
 library(fda)
 
@@ -251,67 +240,61 @@ sort(unique_ages)
 ```
 
 ```{r}
+# Fit model with regular time grid
 set.seed(1)
 age <- 5:27
-M <- length(first_fr_scores)
-acd_fda <- ldm(Ly, Lt, z0 = c(-50, 5), age, optns = list(M = M))
-n_subj <- length(Ly)
+z02 <- generate_initial_values(Lt_list = Lt, Ly_list = Ly, age_grid = age, m = 4, method = "normal")
+acd_fda_2 <- ldm(Ly, Lt, z02, age, optns = list(M = nrow(z02), cores = 24, regular = FALSE))
 
-df <- data.frame(
-  Age = c(unlist(Lt), rep(age, M)),
-  Value = c(unlist(Ly), as.vector(t(acd_fda$path))),
-  id = rep(1:(n_subj + M), c(sapply(Lt, length), rep(length(age), M))),
-  group = factor(rep(c("Observed snippets", "Estimated growth curves"),
-                     c(sum(sapply(Lt, length)), M * length(age))),
-                 levels = c("Observed snippets", "Estimated growth curves"))
-)
-
-library(ggplot2)
-ggplot(data = df, aes(x = Age, y = Value, group = id)) +
-  geom_line(data = subset(df, group == "Observed snippets"), 
-            aes(color = group), linewidth = 0.4) +
-  geom_line(data = subset(df, group == "Estimated growth curves"), 
-            aes(color = group), alpha = 0.2, linewidth = 0.4) +
-  scale_color_manual(values = c("#B47846", "steelblue")) +
-  labs(x = "Age", y = "Functional Value", color = "Group") +
-  theme_bw() +
-  theme(text = element_text(size = 16))
-# Save model
-saveRDS(acd_fda, file = "C:/Users/sonnet/Box/FDA/Emilio_dissertation/GC_dissertation_ALD_1_sim_curves.rds")
-acd_fda <- readRDS(file = "C:/Users/sonnet/Box/FDA/Emilio_dissertation/GC_dissertation_ALD_1_sim_curves.rds")
+saveRDS(acd_fda_2, file = "~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/GC_dissertation_ALD_sim_curves.rds")
 ```
 
 
 ```{r}
-# Fit with irregular design using previous bandwidths
-z0_fr <- cbind(sample(seq(-86, -36, length.out = M*100), replace = TRUE), age[1])
-acd_fda_2 <- ldm(Ly, Lt, z0_fr, age, optns = list(M = M*100, bw1 = acd_fda$optns$bw1, 
-                                                  bw2 = acd_fda$optns$bw2, regular = FALSE))
-saveRDS(acd_fda_2, file = "C:/Users/sonnet/Box/FDA/Emilio_dissertation/GC_dissertation_ALD_100_sim_curves.rds")
-acd_fda_2 <- readRDS(file = "C:/Users/sonnet/Box/FDA/Emilio_dissertation/GC_dissertation_ALD_100_sim_curves.rds")
+# 1. Round time names from rownames of Y_full
+time_names <- round(seq(5,27, length.out = 23*12), 3)
+x_rounded <- round(age, 3)
+unique_times <- sort(unique(x_rounded))
 
-# Plotting
-n_subj <- length(Ly)
-df <- data.frame(
-  Age = c(unlist(Lt), rep(age, M*100)),
-  Value = c(unlist(Ly), as.vector(t(acd_fda_2$path))),
-  id = rep(1:(n_subj + M*100), c(sapply(Lt, length), rep(length(age), M*100))),
-  group = factor(rep(c("Observed snippets", "Estimated growth curves"),
-                     c(sum(sapply(Lt, length)), M*100 * length(age))),
-                 levels = c("Observed snippets", "Estimated growth curves"))
-)
+# 2. For each unique time in age, find the first matching index in time_names
+matching_indices <- sapply(unique_times, function(t) {
+  match(t, time_names)  # match returns the first occurrence
+})
 
-ggplot(df, aes(x = Age, y = Value, group = id)) +
-  geom_line(data = subset(df, group == "Estimated growth curves"),
-            aes(color = group), alpha = 0.1, linewidth = 0.4) +
-  geom_line(data = subset(df, group == "Observed snippets"),
-            aes(color = group), linewidth = 0.4) +
-  scale_color_manual(values = c("steelblue", "#B47846")) +
-  labs(x = "Age", y = "Functional Value", color = "Group") +
-  theme_bw(base_size = 16)
+# 5. Estimated trajectories from acd_fda$path
+est_df <- as.data.frame(t(acd_fda_2$path)) %>%
+  mutate(Time = age) %>%
+  pivot_longer(-Time, names_to = "Subject", values_to = "y") %>%
+  mutate(group = "Estimated")
+
+# 6. (Optional) Observed snippets from sim_al_data$Ly
+obs_df <- map2_dfr(Ly, Lt,
+                   ~ tibble(Time = .y, y = .x),
+                   .id = "Subject") %>%
+  mutate(group = "Observed")
+
+# 7. Combine all
+df_all <- bind_rows(est_df, obs_df)
+
+# 8. Plot
+ggplot(df_all, aes(x = Time, y = y, group = Subject, color = group)) +
+  geom_line(data = filter(df_all, group == "Estimated"), 
+            alpha = 0.4, linewidth = 0.4) +
+  geom_line(data = filter(df_all, group == "Observed"), 
+            linewidth = 0.4) +
+  scale_color_manual(values = c("Estimated" = "steelblue",
+                                "Observed" = "red")) +
+  labs(x = "Time", y = "Functional Value", color = "Trajectory Type",
+       title = "Accelerated Longitudinal Sampling: \n True vs Estimated vs Observed") +
+  theme_minimal(base_size = 14)
 ```
 
+
 ```{r}
+results <- evaluate_simulations(tfine = seq(5,27, length.out = 23*12), sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL, acd_fda_2 = acd_fda_2, plot = TRUE)
+```
+
+```{r eval=FALSE, include=FALSE}
 library(fdapace)
 library(fda)
 
@@ -336,7 +319,7 @@ ald_dat <- fread("C:/Users/sonnet/Box/FDA/Emilio_dissertation/Dissertation_Selec
 response_vars <- c("GQ1", "GQ2")
 
 # Remove rows where any age < 5 and >27
-valid_indices <- apply(ald_dat[, ..time_vars], 1, function(row) all(is.na(row) | row >= 5 & row <= 27))
+valid_indices <- apply(ald_dat[, ..time_vars], 1, function(row) all(is.na(row) | row >= 5 & row <= 22))
 ald_dat <- ald_dat[valid_indices]
 
 # Construct Lt and Ly using lapply (with -500 shift)
@@ -358,65 +341,59 @@ sort(unique_ages)
 ```{r}
 # Fit model with regular time grid
 set.seed(1)
-age <- 5:27
-M <- length(first_fr_scores)
-acd_fda <- ldm(Ly, Lt, z0 = c(-50, 5), age, optns = list(M = M))
-n_subj <- length(Ly)
+age <- 5:22
+z02 <- generate_initial_values(Lt_list = Lt, Ly_list = Ly, age_grid = age, m = 4, method = "normal")
+acd_fda_2 <- ldm(Ly, Lt, z02, age, optns = list(M = nrow(z02), cores = 24, regular = FALSE))
 
-df <- data.frame(
-  Age = c(unlist(Lt), rep(age, M)),
-  Value = c(unlist(Ly), as.vector(t(acd_fda$path))),
-  id = rep(1:(n_subj + M), c(sapply(Lt, length), rep(length(age), M))),
-  group = factor(rep(c("Observed snippets", "Estimated growth curves"),
-                     c(sum(sapply(Lt, length)), M * length(age))),
-                 levels = c("Observed snippets", "Estimated growth curves"))
-)
-
-library(ggplot2)
-ggplot(data = df, aes(x = Age, y = Value, group = id)) +
-  geom_line(data = subset(df, group == "Observed snippets"), 
-            aes(color = group), linewidth = 0.4) +
-  geom_line(data = subset(df, group == "Estimated growth curves"), 
-            aes(color = group), alpha = 0.2, linewidth = 0.4) +
-  scale_color_manual(values = c("#B47846", "steelblue")) +
-  labs(x = "Age", y = "Functional Value", color = "Group") +
-  theme_bw() +
-  theme(text = element_text(size = 16))
-
-# Save model
-saveRDS(acd_fda, file = "C:/Users/sonnet/Box/FDA/Emilio_dissertation/GQ_dissertation_ALD_1_sim_curves.rds")
+saveRDS(acd_fda_2, file = "~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/GQ_dissertation_ALD_sim_curves.rds")
 ```
 
 
 ```{r}
-# Fit with irregular design using previous bandwidths
-z0_fr <- cbind(sample(seq(-80, -50, length.out = M*100), replace = TRUE), age[1])
-acd_fda_2 <- ldm(Ly, Lt, z0_fr, age, optns = list(M = M*100, bw1 = acd_fda$optns$bw1, 
-                                                  bw2 = acd_fda$optns$bw2, regular = FALSE))
-saveRDS(acd_fda_2, file = "C:/Users/sonnet/Box/FDA/Emilio_dissertation/GQ_dissertation_ALD_100_sim_curves.rds")
+# 1. Round time names from rownames of Y_full
+time_names <- round(seq(5,22, length.out = 18*12), 3)
+x_rounded <- round(age, 3)
+unique_times <- sort(unique(x_rounded))
 
-# Plotting
-n_subj <- length(Ly)
-df <- data.frame(
-  Age = c(unlist(Lt), rep(age, M*100)),
-  Value = c(unlist(Ly), as.vector(t(acd_fda_2$path))),
-  id = rep(1:(n_subj + M*100), c(sapply(Lt, length), rep(length(age), M*100))),
-  group = factor(rep(c("Observed snippets", "Estimated growth curves"),
-                     c(sum(sapply(Lt, length)), M*100 * length(age))),
-                 levels = c("Observed snippets", "Estimated growth curves"))
-)
+# 2. For each unique time in age, find the first matching index in time_names
+matching_indices <- sapply(unique_times, function(t) {
+  match(t, time_names)  # match returns the first occurrence
+})
 
-ggplot(df, aes(x = Age, y = Value, group = id)) +
-  geom_line(data = subset(df, group == "Estimated growth curves"),
-            aes(color = group), alpha = 0.1, linewidth = 0.4) +
-  geom_line(data = subset(df, group == "Observed snippets"),
-            aes(color = group), linewidth = 0.4) +
-  scale_color_manual(values = c("steelblue", "#B47846")) +
-  labs(x = "Age", y = "Functional Value", color = "Group") +
-  theme_bw(base_size = 16)
+# 5. Estimated trajectories from acd_fda$path
+est_df <- as.data.frame(t(acd_fda_2$path)) %>%
+  mutate(Time = age) %>%
+  pivot_longer(-Time, names_to = "Subject", values_to = "y") %>%
+  mutate(group = "Estimated")
+
+# 6. (Optional) Observed snippets from sim_al_data$Ly
+obs_df <- map2_dfr(Ly, Lt,
+                   ~ tibble(Time = .y, y = .x),
+                   .id = "Subject") %>%
+  mutate(group = "Observed")
+
+# 7. Combine all
+df_all <- bind_rows(est_df, obs_df)
+
+# 8. Plot
+ggplot(df_all, aes(x = Time, y = y, group = Subject, color = group)) +
+  geom_line(data = filter(df_all, group == "Estimated"), 
+            alpha = 0.4, linewidth = 0.4) +
+  geom_line(data = filter(df_all, group == "Observed"), 
+            linewidth = 0.4) +
+  scale_color_manual(values = c("Estimated" = "steelblue",
+                                "Observed" = "red")) +
+  labs(x = "Time", y = "Functional Value", color = "Trajectory Type",
+       title = "Accelerated Longitudinal Sampling: \n True vs Estimated vs Observed") +
+  theme_minimal(base_size = 14)
 ```
 
+
 ```{r}
+results <- evaluate_simulations(tfine = seq(5,22, length.out = 18*12), sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL, acd_fda_2 = acd_fda_2, plot = TRUE)
+```
+
+```{r eval=FALSE, include=FALSE}
 library(fdapace)
 library(fda)
 

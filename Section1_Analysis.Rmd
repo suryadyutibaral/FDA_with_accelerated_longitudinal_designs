@@ -6,6 +6,8 @@ output: pdf_document
 ---
 
 ```{r}
+result_tbl <- readRDS(file = "~/FDA_with_accelerated_longitudinal_designs/result_tbl")
+
 # Define all conditions and metrics
 conditions <- c("normal_m4", "normal_m10", "normal_m100", 
                 "replicate_m4", "replicate_m10", "replicate_m100")

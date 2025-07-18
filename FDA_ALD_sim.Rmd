@@ -21,7 +21,7 @@ set.seed(8)
 n_subj = 250
 age <- 0:19
 tfine <-  seq(0, 19, length.out = 240)
-method <- "replicate"
+method <- "normal"
 rep_cond <- 100
 sim_data <- simulate_exponential_decay(n_subjects = n_subj, x = tfine, noise = .1)
 
@@ -142,16 +142,6 @@ mean(results$mse_opt)
 mean(results$mse_all)
 mean(results$bias_opt)
 mean(results$bias_all)
-
-n <- length(results$ise_all)
-var1 <- var(results$ise_all)
-var2 <- var(results$ise_opt)
-
-chi_sq_stat <- (n - 1) * var1 / var2
-p_val <- pchisq(chi_sq_stat, df = n - 1, lower.tail = FALSE)
-
-cat("Chi-squared statistic:", chi_sq_stat, "\n")
-cat("p-value:", p_val, "\n")
 
 ```
 

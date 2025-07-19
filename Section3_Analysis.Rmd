@@ -52,47 +52,6 @@ acd_fda_2 <- ldm(Ly, Lt, z02, age, optns = list(M = nrow(z02), cores = 24, regul
 saveRDS(acd_fda_2, file = "~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/GF_dissertation_ALD_sim_curves.rds")
 ```
 
-
-```{r}
-# 1. Round time names from rownames of Y_full
-time_names <- round(seq(5,22, length.out = 18*12), 3)
-x_rounded <- round(age, 3)
-unique_times <- sort(unique(x_rounded))
-
-# 2. For each unique time in age, find the first matching index in time_names
-matching_indices <- sapply(unique_times, function(t) {
-  match(t, time_names)  # match returns the first occurrence
-})
-
-# 5. Estimated trajectories from acd_fda$path
-est_df <- as.data.frame(t(acd_fda_2$path)) %>%
-  mutate(Time = age) %>%
-  pivot_longer(-Time, names_to = "Subject", values_to = "y") %>%
-  mutate(group = "Estimated")
-
-# 6. (Optional) Observed snippets from sim_al_data$Ly
-obs_df <- map2_dfr(Ly, Lt,
-                   ~ tibble(Time = .y, y = .x),
-                   .id = "Subject") %>%
-  mutate(group = "Observed")
-
-# 7. Combine all
-df_all <- bind_rows(est_df, obs_df)
-
-# 8. Plot
-ggplot(df_all, aes(x = Time, y = y, group = Subject, color = group)) +
-  geom_line(data = filter(df_all, group == "Estimated"), 
-            alpha = 0.4, linewidth = 0.4) +
-  geom_line(data = filter(df_all, group == "Observed"), 
-            linewidth = 0.4) +
-  scale_color_manual(values = c("Estimated" = "steelblue",
-                                "Observed" = "red")) +
-  labs(x = "Time", y = "Functional Value", color = "Trajectory Type",
-       title = "Accelerated Longitudinal Sampling: \n True vs Estimated vs Observed") +
-  theme_minimal(base_size = 14)
-```
-
-
 ```{r}
 results <- evaluate_simulations(tfine = seq(5,22, length.out = 18*12), sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL, acd_fda_2 = acd_fda_2, plot = TRUE)
 ```
@@ -132,48 +91,6 @@ acd_fda_2 <- ldm(Ly, Lt, z02, age, optns = list(M = nrow(z02), cores = 24, regul
 
 saveRDS(acd_fda_2, file = "~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/GAK_dissertation_ALD_sim_curves.rds")
 ```
-
-
-```{r}
-# 1. Round time names from rownames of Y_full
-time_names <- round(seq(5,22, length.out = 18*12), 3)
-x_rounded <- round(age, 3)
-unique_times <- sort(unique(x_rounded))
-
-# 2. For each unique time in age, find the first matching index in time_names
-matching_indices <- sapply(unique_times, function(t) {
-  match(t, time_names)  # match returns the first occurrence
-})
-
-# 5. Estimated trajectories from acd_fda$path
-est_df <- as.data.frame(t(acd_fda_2$path)) %>%
-  mutate(Time = age) %>%
-  pivot_longer(-Time, names_to = "Subject", values_to = "y") %>%
-  mutate(group = "Estimated")
-
-# 6. (Optional) Observed snippets from sim_al_data$Ly
-obs_df <- map2_dfr(Ly, Lt,
-                   ~ tibble(Time = .y, y = .x),
-                   .id = "Subject") %>%
-  mutate(group = "Observed")
-
-# 7. Combine all
-df_all <- bind_rows(est_df, obs_df)
-
-# 8. Plot
-ggplot(df_all, aes(x = Time, y = y, group = Subject, color = group)) +
-  geom_line(data = filter(df_all, group == "Estimated"), 
-            alpha = 0.4, linewidth = 0.4) +
-  geom_line(data = filter(df_all, group == "Observed"), 
-            linewidth = 0.4) +
-  scale_color_manual(values = c("Estimated" = "steelblue",
-                                "Observed" = "red")) +
-  labs(x = "Time", y = "Functional Value", color = "Trajectory Type",
-       title = "Accelerated Longitudinal Sampling: \n True vs Estimated vs Observed") +
-  theme_minimal(base_size = 14)
-```
-
-
 ```{r}
 results <- evaluate_simulations(tfine = seq(5,22, length.out = 18*12), sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL, acd_fda_2 = acd_fda_2, plot = TRUE)
 ```
@@ -212,48 +129,6 @@ acd_fda_2 <- ldm(Ly, Lt, z02, age, optns = list(M = nrow(z02), cores = 24, regul
 
 saveRDS(acd_fda_2, file = "~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/GC_dissertation_ALD_sim_curves.rds")
 ```
-
-
-```{r}
-# 1. Round time names from rownames of Y_full
-time_names <- round(seq(5,22, length.out = 18*12), 3)
-x_rounded <- round(age, 3)
-unique_times <- sort(unique(x_rounded))
-
-# 2. For each unique time in age, find the first matching index in time_names
-matching_indices <- sapply(unique_times, function(t) {
-  match(t, time_names)  # match returns the first occurrence
-})
-
-# 5. Estimated trajectories from acd_fda$path
-est_df <- as.data.frame(t(acd_fda_2$path)) %>%
-  mutate(Time = age) %>%
-  pivot_longer(-Time, names_to = "Subject", values_to = "y") %>%
-  mutate(group = "Estimated")
-
-# 6. (Optional) Observed snippets from sim_al_data$Ly
-obs_df <- map2_dfr(Ly, Lt,
-                   ~ tibble(Time = .y, y = .x),
-                   .id = "Subject") %>%
-  mutate(group = "Observed")
-
-# 7. Combine all
-df_all <- bind_rows(est_df, obs_df)
-
-# 8. Plot
-ggplot(df_all, aes(x = Time, y = y, group = Subject, color = group)) +
-  geom_line(data = filter(df_all, group == "Estimated"), 
-            alpha = 0.4, linewidth = 0.4) +
-  geom_line(data = filter(df_all, group == "Observed"), 
-            linewidth = 0.4) +
-  scale_color_manual(values = c("Estimated" = "steelblue",
-                                "Observed" = "red")) +
-  labs(x = "Time", y = "Functional Value", color = "Trajectory Type",
-       title = "Accelerated Longitudinal Sampling: \n True vs Estimated vs Observed") +
-  theme_minimal(base_size = 14)
-```
-
-
 ```{r}
 results <- evaluate_simulations(tfine = seq(5,22, length.out = 18*12), sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL, acd_fda_2 = acd_fda_2, plot = TRUE)
 ```
@@ -292,48 +167,6 @@ acd_fda_2 <- ldm(Ly, Lt, z02, age, optns = list(M = nrow(z02), cores = 24, regul
 
 saveRDS(acd_fda_2, file = "~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/GQ_dissertation_ALD_sim_curves.rds")
 ```
-
-
-```{r}
-# 1. Round time names from rownames of Y_full
-time_names <- round(seq(5,22, length.out = 18*12), 3)
-x_rounded <- round(age, 3)
-unique_times <- sort(unique(x_rounded))
-
-# 2. For each unique time in age, find the first matching index in time_names
-matching_indices <- sapply(unique_times, function(t) {
-  match(t, time_names)  # match returns the first occurrence
-})
-
-# 5. Estimated trajectories from acd_fda$path
-est_df <- as.data.frame(t(acd_fda_2$path)) %>%
-  mutate(Time = age) %>%
-  pivot_longer(-Time, names_to = "Subject", values_to = "y") %>%
-  mutate(group = "Estimated")
-
-# 6. (Optional) Observed snippets from sim_al_data$Ly
-obs_df <- map2_dfr(Ly, Lt,
-                   ~ tibble(Time = .y, y = .x),
-                   .id = "Subject") %>%
-  mutate(group = "Observed")
-
-# 7. Combine all
-df_all <- bind_rows(est_df, obs_df)
-
-# 8. Plot
-ggplot(df_all, aes(x = Time, y = y, group = Subject, color = group)) +
-  geom_line(data = filter(df_all, group == "Estimated"), 
-            alpha = 0.4, linewidth = 0.4) +
-  geom_line(data = filter(df_all, group == "Observed"), 
-            linewidth = 0.4) +
-  scale_color_manual(values = c("Estimated" = "steelblue",
-                                "Observed" = "red")) +
-  labs(x = "Time", y = "Functional Value", color = "Trajectory Type",
-       title = "Accelerated Longitudinal Sampling: \n True vs Estimated vs Observed") +
-  theme_minimal(base_size = 14)
-```
-
-
 ```{r}
 results <- evaluate_simulations(tfine = seq(5,22, length.out = 18*12), sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL, acd_fda_2 = acd_fda_2, plot = TRUE)
 ```
@@ -386,48 +219,6 @@ acd_fda_2 <- ldm(Ly, Lt, z02, age, optns = list(M = nrow(z02), cores = 24, regul
 
 saveRDS(acd_fda_2, file = "~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/NORA_ALD_sim_curves.rds")
 ```
-
-
-```{r}
-# 1. Round time names from rownames of Y_full
-time_names <- round(tfine, 3)
-x_rounded <- round(age, 3)
-unique_times <- sort(unique(x_rounded))
-
-# 2. For each unique time in age, find the first matching index in time_names
-matching_indices <- sapply(unique_times, function(t) {
-  match(t, time_names)  # match returns the first occurrence
-})
-
-# 5. Estimated trajectories from acd_fda$path
-est_df <- as.data.frame(t(acd_fda_2$path)) %>%
-  mutate(Time = age) %>%
-  pivot_longer(-Time, names_to = "Subject", values_to = "y") %>%
-  mutate(group = "Estimated")
-
-# 6. (Optional) Observed snippets from sim_al_data$Ly
-obs_df <- map2_dfr(Ly, Lt,
-                   ~ tibble(Time = .y, y = .x),
-                   .id = "Subject") %>%
-  mutate(group = "Observed")
-
-# 7. Combine all
-df_all <- bind_rows(est_df, obs_df)
-
-# 8. Plot
-ggplot(df_all, aes(x = Time, y = y, group = Subject, color = group)) +
-  geom_line(data = filter(df_all, group == "Estimated"), 
-            alpha = 0.4, linewidth = 0.4) +
-  geom_line(data = filter(df_all, group == "Observed"), 
-            linewidth = 0.4) +
-  scale_color_manual(values = c("Estimated" = "steelblue",
-                                "Observed" = "red")) +
-  labs(x = "Time", y = "Functional Value", color = "Trajectory Type",
-       title = "Accelerated Longitudinal Sampling: \n True vs Estimated vs Observed") +
-  theme_minimal(base_size = 14)
-```
-
-
 ```{r}
 results <- evaluate_simulations(tfine = tfine, sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL, acd_fda_2 = acd_fda_2, plot = TRUE)
 ```

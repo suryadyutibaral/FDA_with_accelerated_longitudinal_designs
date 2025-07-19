@@ -377,7 +377,31 @@ evaluate_simulations <- function(tfine, sim_al_data, sim_data, acd_fda_2, plot =
   
   # --- Step 5: Plots ---
   if (plot) {
-    matplot(tfine, fd_eval_mat, type = "l", lty = 1, xlab = "Age", ylab = "Value", main = "Smoothed Estimated Trajectories")
+
+    est_df <- as.data.frame(fd_eval_mat) %>%
+      mutate(Time = tfine) %>%
+      pivot_longer(-Time, names_to = "Subject", values_to = "y") %>%
+      mutate(group = "Estimated")
+
+    obs_df <- map2_dfr(sim_al_data$Ly, sim_al_data$Lt,
+                       ~ tibble(Time = .y, y = .x),
+                       .id = "Subject") %>%
+      mutate(group = "Observed")
+
+    df_all <- bind_rows(est_df, obs_df)
+
+    trajectory_plot <- ggplot(df_all, aes(x = Time, y = y, group = Subject, color = group)) +
+      geom_line(data = filter(df_all, group == "Estimated"), 
+                alpha = 0.4, linewidth = 0.4) +
+      geom_line(data = filter(df_all, group == "Observed"), 
+                linewidth = 0.4) +
+      scale_color_manual(values = c("Estimated" = "steelblue",
+                                    "Observed" = "red")) +
+      labs(x = "Time", y = "Functional Value", color = "Trajectory Type",
+           title = "Accelerated Longitudinal Sampling:\nObserved vs Estimated Trajectories") +
+      theme_minimal(base_size = 14)
+    
+    print(trajectory_plot)
     
     if (is.null(plot_subjects)) {
       valid_indices <- which(sapply(Ly_sim, function(x) length(x) > 1))

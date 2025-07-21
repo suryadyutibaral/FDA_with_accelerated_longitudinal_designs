@@ -154,22 +154,29 @@ multiSubjODEsumm <- summary(multiSubjODERun)
 multiSubjODEsumm$parameters
 ```
 ```{r}
-# Obtain individual-level Kalman Scores
-ks <- lapply(X = multiSubjODERun@submodels,
-             FUN = mxKalmanScores, frontend=FALSE ) 
+simulate_one_kalman_path <- function(id) {
+  cKsId <- suppressMessages(
+    OpenMx::mxKalmanScores(model = multiSubjODERun@submodels[[id]], data = data[[id]])$xSmoothed
+  )
 
-LCS_SSM <- list()
-
-for(id in 1:n_subj){
-  (cKsId <- suppressMessages(mxKalmanScores(model = multiSubjODERun@submodels[[id]], 
-                           data = data[[id]])$xSmoothed))
-
-  data_ind <- as.data.frame(cbind(data[[id]]$age, data[[id]]$y, cKsId[-1,1])) 
-  # The first row of cKsId must be removed
+  data_ind <- as.data.frame(cbind(data[[id]]$age, data[[id]]$y, cKsId[-1, 1]))
   colnames(data_ind) <- c("age", "y_observed", "y_KS")
-  
-  LCS_SSM[[id]] <- data_ind
+
+  return(data_ind)
 }
+
+library(parallel)
+
+# Detect and register cluster
+num_cores <- detectCores() - 1
+cl <- makeCluster(num_cores)
+
+# Export necessary variables to the cluster
+clusterExport(cl, varlist = c("multiSubjODERun", "data", "simulate_one_kalman_path"), envir = environment())
+
+LCS_SSM <- parLapply(cl, 1:n_subj, simulate_one_kalman_path)
+stopCluster(cl)
+
 
 ```
 

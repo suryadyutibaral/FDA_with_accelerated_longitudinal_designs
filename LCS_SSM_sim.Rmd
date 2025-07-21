@@ -161,8 +161,8 @@ ks <- lapply(X = multiSubjODERun@submodels,
 LCS_SSM <- list()
 
 for(id in 1:n_subj){
-  (cKsId <- mxKalmanScores(model = multiSubjODERun@submodels[[id]], 
-                           data = data[[id]])$xSmoothed)
+  (cKsId <- suppressMessages(mxKalmanScores(model = multiSubjODERun@submodels[[id]], 
+                           data = data[[id]])$xSmoothed))
 
   data_ind <- as.data.frame(cbind(data[[id]]$age, data[[id]]$y, cKsId[-1,1])) 
   # The first row of cKsId must be removed

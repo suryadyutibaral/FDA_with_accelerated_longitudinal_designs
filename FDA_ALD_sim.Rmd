@@ -25,7 +25,6 @@ method <- "normal"
 rep_cond <- 100
 sim_data <- simulate_exponential_decay(n_subjects = n_subj, x = tfine, noise = .1)
 
-# Example plot of 10 random subjects
 matplot(sim_data$x, sim_data$trajectories[, 1:n_subj], type = "l", lty = 1,
         ylab = "y", xlab = "Time", main = "Exponential Decay Trajectories")
 

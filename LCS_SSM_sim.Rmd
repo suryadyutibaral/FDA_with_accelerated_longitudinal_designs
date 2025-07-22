@@ -21,7 +21,6 @@ age <- 0:19
 tfine <-  seq(0, 19, length.out = 240)
 sim_data <- simulate_exponential_decay(n_subjects = n_subj, x = tfine, noise = .1)
 
-# Example plot of 10 random subjects
 matplot(sim_data$x, sim_data$trajectories[, 1:n_subj], type = "l", lty = 1,
         ylab = "y", xlab = "Time", main = "Exponential Decay Trajectories")
 
@@ -155,15 +154,33 @@ multiSubjODEsumm$parameters
 ```
 ```{r}
 simulate_one_kalman_path <- function(id) {
-  cKsId <- suppressMessages(
-    OpenMx::mxKalmanScores(model = multiSubjODERun@submodels[[id]], data = data[[id]])$xSmoothed
+  # Get Kalman scores
+  ks_scores <- suppressMessages(
+    OpenMx::mxKalmanScores(model = multiSubjODERun@submodels[[id]], data = data[[id]])
   )
+  y_KS <- ks_scores$xSmoothed[-1, 1]  # Drop first row
+  
+  # Compute confidence intervals
+  errors <- sqrt(ks_scores$PSmoothed[1, 1, 2:(length(y_KS) + 1)])
+  alpha <- 0.05
+  qZ <- qnorm(1 - alpha / 2)
+  upper <- y_KS + qZ * errors
+  lower <- y_KS - qZ * errors
 
-  data_ind <- as.data.frame(cbind(data[[id]]$age, data[[id]]$y, cKsId[-1, 1]))
-  colnames(data_ind) <- c("age", "y_observed", "y_KS")
-
-  return(data_ind)
+  # Construct output dataframe
+  df <- data.frame(
+    id = id,
+    age = data[[id]]$age,
+    y_observed = data[[id]]$y,
+    y_KS = y_KS,
+    CI_upper = upper,
+    CI_lower = lower,
+    y_true = sim_data$Y_no_noise[, id]
+  )
+  
+  return(df)
 }
+
 
 library(parallel)
 
@@ -172,7 +189,7 @@ num_cores <- detectCores() - 1
 cl <- makeCluster(num_cores)
 
 # Export necessary variables to the cluster
-clusterExport(cl, varlist = c("multiSubjODERun", "data", "simulate_one_kalman_path"), envir = environment())
+clusterExport(cl, varlist = c("multiSubjODERun", "data", "simulate_one_kalman_path", "sim_data"), envir = environment())
 
 LCS_SSM <- parLapply(cl, 1:n_subj, simulate_one_kalman_path)
 stopCluster(cl)
@@ -193,39 +210,57 @@ sample_ids <- sample(seq_len(n_subj), 5)
 
 for (id in sample_ids) {
   
-  # Kalman Smoothed + Observed Data
-  df_obs_ks <- LCS_SSM[[id]] |>
-    dplyr::mutate(Source = "Observed") |>
-    dplyr::rename(Value = y_observed) |>
-    dplyr::select(age, Value, Source)
+  df_subj <- LCS_SSM[[id]]
   
-  df_ks <- LCS_SSM[[id]] |>
-    dplyr::mutate(Source = "Kalman Smoothed") |>
-    dplyr::rename(Value = y_KS) |>
-    dplyr::select(age, Value, Source)
+  # Melt to long format for legend control (optional but helps clarify source)
+  df_plot <- df_subj |>
+    dplyr::mutate(
+      `Kalman Upper` = CI_upper,
+      `Kalman Lower` = CI_lower,
+      `Kalman Smoothed` = y_KS,
+      `True` = y_true,
+      `Observed` = y_observed
+    )
   
-  # True data
-  df_true <- tibble(
-    age = sim_al_data$x_full,
-    Value = sim_data$Y_no_noise[, id],
-    Source = "True"
-  )
-  
-  # Combine all into one
-  df_plot <- dplyr::bind_rows(df_obs_ks, df_ks, df_true)
-  
-  # Plot
-  p <- ggplot(df_plot, aes(x = age, y = Value, color = Source)) +
-    geom_line(data = dplyr::filter(df_plot, Source != "Observed"), size = 1) +
-    geom_point(data = dplyr::filter(df_plot, Source == "Observed"), size = 2) +
-    labs(title = paste("Subject", id, ": True, Observed, and Kalman Smoothed"),
-         x = "Age", y = "Value", color = "Legend") +
-    scale_color_manual(values = c("True" = "red", 
-                                  "Kalman Smoothed" = "blue", 
-                                  "Observed" = "black")) +
+  p <- ggplot(data = df_plot, aes(x = age)) +
+    
+    # Confidence ribbon
+    geom_ribbon(aes(ymin = CI_lower, ymax = CI_upper, fill = "95% CI"),
+                alpha = 0.15, show.legend = TRUE) +
+
+    # Kalman CI bounds
+    geom_line(aes(y = CI_upper, color = "95% CI Bounds"), size = 0.2) +
+    geom_line(aes(y = CI_lower, color = "95% CI Bounds"), size = 0.2) +
+
+    # Kalman-smoothed line
+    geom_line(aes(y = y_KS, color = "Kalman Smoothed"),
+              size = 0.8, linetype = "dashed") +
+
+    # Observed points and line
+    geom_point(aes(y = y_observed, color = "Observed"), size = 2) +
+    geom_line(data = df_plot[!is.na(df_plot$y_observed), ],
+              aes(y = y_observed, color = "Observed"), size = 0.5) +
+
+    # True latent line
+    geom_line(aes(y = y_true, color = "True"), size = 0.8) +
+
+    # Manual color and fill scales
+    scale_color_manual(name = "Legend",
+                       values = c("Observed" = "black",
+                                  "Kalman Smoothed" = "blue",
+                                  "True" = "red",
+                                  "95% CI Bounds" = "blue")) +
+    scale_fill_manual(name = "Legend",
+                      values = c("95% CI" = "blue")) +
+    
+    scale_x_continuous(breaks = seq(0, 20, 1)) +
+    ylab("y scores") + 
+    xlab("Age") +
+    ggtitle(paste("Subject", id, "- Kalman Smoothed vs Observed and True")) +
     theme_minimal() +
-    theme(legend.position = "bottom")
-  
+    theme(legend.position = "bottom",
+          legend.title = element_blank())
+
   print(p)
 }
 
@@ -349,7 +384,6 @@ ggplot(df_outliers, aes(x = "", y = Value)) +
   theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
 
 ```
-
 ```{r}
 end = Sys.time()
 end - begin

@@ -1,0 +1,110 @@
+---
+title: "LCS_FDA_sim"
+author: "Suryadyuti Baral"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+```{r}
+library(pracma)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(parallel)
+library(fda)
+begin = Sys.time()
+source("~/FDA_with_accelerated_longitudinal_designs/ldm.R")
+source("~/FDA_with_accelerated_longitudinal_designs/kerFctn.R")
+source("~/FDA_with_accelerated_longitudinal_designs/Rfunctions.R")
+set.seed(8)
+n_subj = 250
+age <- 0:19
+tfine <-  seq(0, 19, length.out = 240)
+method <- "normal"
+rep_cond <- 4
+sim_data <- simulate_exponential_decay(n_subjects = n_subj, x = tfine, noise = .1)
+
+matplot(sim_data$x, sim_data$trajectories[, 1:n_subj], type = "l", lty = 1,
+        ylab = "y", xlab = "Time", main = "Exponential Decay Trajectories")
+
+```
+```{r}
+sim_al_data <- simulate_accelerated_longitudinal(Y_full = sim_data$trajectories, n_time_points = 3)
+
+# Plot sparse trajectories
+matplot(sim_al_data$x_full, sim_al_data$Y_full, type = "l", lty = 2,
+        col = "gray", ylab = "y", xlab = "Time", main = "Accelerated Longitudinal Sampling")
+for (i in 1:n_subj) {
+  points(sim_al_data$Lt[[i]], sim_al_data$Ly[[i]], col = i, pch = 16)
+  lines(sim_al_data$Lt[[i]], sim_al_data$Ly[[i]], col = i)
+}
+
+```
+
+## FDA
+
+```{r}
+# Generate initial values depending on method
+  if (method == "normal") {
+    z02 <- generate_initial_values(
+      Lt_list = sim_al_data$Lt,
+      Ly_list = sim_al_data$Ly,
+      age_grid = age,
+      m = rep_cond,
+      method = "normal"
+    )
+  } else if (method == "replicate") {
+    z02 <- generate_initial_values(
+      Lt_list = sim_data$Lt_true,
+      Ly_list = sim_data$Ly_true,
+      age_grid = age,
+      m = rep_cond,
+      method = "replicate"
+    )
+  } else {
+    stop("Invalid method. Use 'normal' or 'replicate'.")
+  }
+
+  # Fit models
+acd_fda_2 <- ldm(sim_al_data$Ly, sim_al_data$Lt, z02, age,
+    optns = list(M = nrow(z02), cores = 24, regular = FALSE))
+```
+
+```{r}
+# Evaluate final model
+results <- evaluate_simulations(tfine = tfine, sim_al_data = sim_al_data, sim_data = sim_data, acd_fda_2 = acd_fda_2, plot = TRUE)
+
+mean(results$ise_opt)
+mean(results$ise_all)
+mean(results$ie_opt)
+mean(results$ie_all)
+mean(results$mse_opt)
+mean(results$mse_all)
+mean(results$bias_opt)
+mean(results$bias_all)
+
+```
+
+## LCS-CT-SSM
+
+```{r}
+data <- convert_to_full_subject_list(sim_al_data)
+LCS_SSM <- run_full_kalman_simulation(data)
+```
+```{r}
+results2 <- suppressWarnings(evaluate_lcsssm(LCS_SSM, sim_data, sim_al_data, plot = TRUE))
+
+mean(results2$ise)
+mean(results2$ie)
+mean(results2$mse)
+mean(results2$bias)
+```
+## Compare LCS and FDA
+```{r}
+metrics_df<-suppressWarnings(compare_fda_lcs(results, results2, LCS_SSM, plot = TRUE))
+```
+
+```{r}
+end = Sys.time()
+end - begin
+```

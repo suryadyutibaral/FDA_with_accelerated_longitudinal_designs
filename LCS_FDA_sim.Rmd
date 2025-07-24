@@ -29,7 +29,7 @@ matplot(sim_data$x, sim_data$trajectories[, 1:n_subj], type = "l", lty = 1,
 
 ```
 ```{r}
-sim_al_data <- simulate_accelerated_longitudinal(Y_full = sim_data$trajectories, n_time_points = 3)
+sim_al_data <- simulate_accelerated_longitudinal(Y_full = sim_data$trajectories, n_time_points = 2)
 
 # Plot sparse trajectories
 matplot(sim_al_data$x_full, sim_al_data$Y_full, type = "l", lty = 2,
@@ -82,13 +82,6 @@ mean(results$mse_opt)
 mean(results$mse_all)
 mean(results$bias_opt)
 mean(results$bias_all)
-
-# Mean bound width at each time point
-mean_d_bound <- rowMeans(results$d_bound, na.rm = TRUE)
-
-plot(mean_d_bound, type = "l", lwd = 2, col = "blue",
-     xlab = "Time Index", ylab = "Mean Bound Width",
-     main = "Average Width of Confidence Bounds Over Time")
 
 ```
 

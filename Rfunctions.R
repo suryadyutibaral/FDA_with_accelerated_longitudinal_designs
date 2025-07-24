@@ -993,7 +993,7 @@ compare_fda_lcs <- function(results, results2, LCS_SSM,
     print(error_bound_plot)
   }
   
-  return(list(metrics_df,
+  return(list(metrics = metrics_df,
               DB_FDA = results$d_bound,
               DB_LCS = results2$d_bound))
 }

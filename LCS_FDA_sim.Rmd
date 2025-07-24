@@ -83,6 +83,13 @@ mean(results$mse_all)
 mean(results$bias_opt)
 mean(results$bias_all)
 
+# Mean bound width at each time point
+mean_d_bound <- rowMeans(results$d_bound, na.rm = TRUE)
+
+plot(mean_d_bound, type = "l", lwd = 2, col = "blue",
+     xlab = "Time Index", ylab = "Mean Bound Width",
+     main = "Average Width of Confidence Bounds Over Time")
+
 ```
 
 ## LCS-CT-SSM

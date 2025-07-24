@@ -66,14 +66,15 @@ simulate_accelerated_longitudinal <- function(Y_full,
   original_grid <- seq(time_range[1], time_range[2], length.out = nrow(Y_full))
   monthly_grid <- seq(time_range[1], time_range[2], length.out = time_grid_length)
   
-  # Find closest points on original grid for monthly grid
   subsample_idx <- sapply(monthly_grid, function(t) which.min(abs(original_grid - t)))
   Y_full_subsampled <- Y_full[subsample_idx, ]
   x_full <- monthly_grid
   
-  # Step 2: Precompute subject IDs for fixed start
+  # Step 2: Precompute subject IDs for fixed start and fixed end
   n_fixed <- round(x * n_subjects)
   fixed_start_subjects <- sample(seq_len(n_subjects), n_fixed)
+  remaining_subjects <- setdiff(seq_len(n_subjects), fixed_start_subjects)
+  fixed_end_subjects <- sample(remaining_subjects, n_fixed)
   
   Lt <- vector("list", n_subjects)
   Ly <- vector("list", n_subjects)
@@ -82,22 +83,34 @@ simulate_accelerated_longitudinal <- function(Y_full,
     sampled_times <- numeric(n_time_points)
     
     if (i %in% fixed_start_subjects) {
-      # Force first time point to be time_range[1]
+      # Forward sampling with fixed start
       sampled_times[1] <- time_range[1]
-    } else {
-      # Random first time point
-      max_start <- time_range[2] - (n_time_points - 1) * 0.92
-      sampled_times[1] <- runif(1, min = time_range[1], max = max_start)
-    }
-    
-    for (j in 2:n_time_points) {
-      min_time <- sampled_times[j - 1] + 0.9
-      max_time <- sampled_times[j - 1] + 2
-      if (min_time >= time_range[2]) {
-        sampled_times <- sampled_times[1:(j - 1)]
-        break
+      for (j in 2:n_time_points) {
+        min_time <- sampled_times[j - 1] + 0.9
+        max_time <- sampled_times[j - 1] + 2
+        sampled_times[j] <- runif(1, min = min_time, max = min(max_time, time_range[2]))
       }
-      sampled_times[j] <- runif(1, min = min_time, max = min(max_time, time_range[2]))
+    } else if (i %in% fixed_end_subjects) {
+      # Backward sampling with fixed end
+      sampled_times[n_time_points] <- time_range[2]
+      for (j in (n_time_points - 1):1) {
+        max_time <- sampled_times[j + 1] - 0.9
+        min_time <- sampled_times[j + 1] - 2
+        sampled_times[j] <- runif(1, max(min_time, time_range[1]), max_time)
+      }
+    } else {
+      # Random forward sampling (default)
+      max_start <- time_range[2] - (n_time_points - 1) * 2
+      sampled_times[1] <- runif(1, min = time_range[1], max = max_start)
+      for (j in 2:n_time_points) {
+        min_time <- sampled_times[j - 1] + 0.9
+        max_time <- sampled_times[j - 1] + 2
+        if (min_time >= time_range[2]) {
+          sampled_times <- sampled_times[1:(j - 1)]
+          break
+        }
+        sampled_times[j] <- runif(1, min = min_time, max = min(max_time, time_range[2]))
+      }
     }
     
     # Match to closest x_full grid points
@@ -237,11 +250,11 @@ evaluate_simulations <- function(tfine, sim_al_data, sim_data, acd_fda_2, plot =
   time_est <- seq(tfine[1], n_obs, length.out = ncol(Y_estimated))
   
   # --- Step 2: Smooth each subject ---
-  n_subjects <- nrow(Y_estimated)
-  fd_eval_mat <- matrix(NA, nrow = length(tfine), ncol = n_subjects)
+  n_sim_traj <- nrow(Y_estimated)
+  fd_eval_mat <- matrix(NA, nrow = length(tfine), ncol = n_sim_traj)
   error_count <- 0
   
-  for (i in 1:n_subjects) {
+  for (i in 1:n_sim_traj) {
     y <- Y_estimated[i, ]
     tryCatch({
       smooth_fit <- smooth.spline(x = time_est, y = y, cv = FALSE)
@@ -267,6 +280,7 @@ evaluate_simulations <- function(tfine, sim_al_data, sim_data, acd_fda_2, plot =
   bias_vec <- numeric(n_sub)
   mse_all <- numeric(n_sub)
   bias_all <- numeric(n_sub)
+  bound_vec <- matrix(NA, nrow = length(tfine), ncol = n_sub)
   
   for (i in seq_len(n_sub)) {
     obs_time <- sim_al_data$Lt[[i]]
@@ -279,6 +293,7 @@ evaluate_simulations <- function(tfine, sim_al_data, sim_data, acd_fda_2, plot =
       bias_vec[i] <- NA
       mse_all[i] <- NA
       bias_all[i] <- NA
+      bound_vec[, id] <- rep(NA, length(tfine))
       next
     }
     pos <- sapply(obs_time, function(t) {
@@ -317,6 +332,7 @@ evaluate_simulations <- function(tfine, sim_al_data, sim_data, acd_fda_2, plot =
       bias_vec[i] <- NA
       mse_all[i] <- NA
       bias_all[i] <- NA
+      bound_vec[, id] <- rep(NA, length(tfine))
       next
     } 
     
@@ -332,6 +348,13 @@ evaluate_simulations <- function(tfine, sim_al_data, sim_data, acd_fda_2, plot =
     bias_vec[i] <- mean(obs_vals - rowMeans(sim_vals[, top_idx, drop = FALSE]))
     mse_all[i] <- mean((sim_mean_vals - obs_vals)^2)
     bias_all[i] <- mean(obs_vals - sim_mean_vals)
+    bound_vec[, i] <- apply(Ly_sim[[i]], 1, function(x) {
+      if (all(is.finite(x))) {
+        quantile(x, 0.95, na.rm = TRUE) - quantile(x, 0.05, na.rm = TRUE)
+      } else {
+        NA  
+      }
+    })
   }
   
   # Initialize ISE/IE variables
@@ -479,7 +502,8 @@ evaluate_simulations <- function(tfine, sim_al_data, sim_data, acd_fda_2, plot =
     mse_opt = mse_vec,
     mse_all = mse_all,
     bias_opt = bias_vec,
-    bias_all = bias_all
+    bias_all = bias_all,
+    d_bound = bound_vec
   ))
 }
 
@@ -674,6 +698,7 @@ evaluate_lcsssm <- function(LCS_SSM, sim_data, sim_al_data, plot = FALSE, plot_s
   bias_vec <- numeric(n_subj)
   ise_vec <- numeric(n_subj)
   ie_vec <- numeric(n_subj)
+  bound_vec <- matrix(NA, nrow = length(tfine), ncol = n_subj)
   
   for (id in seq_len(n_subj)) {
     ks <- LCS_SSM[[id]]$y_KS
@@ -691,6 +716,7 @@ evaluate_lcsssm <- function(LCS_SSM, sim_data, sim_al_data, plot = FALSE, plot_s
     
     mse_vec[id] <- mean((true_vals_at_obs - obs_vals)^2)
     bias_vec[id] <- mean(ks_vals_at_obs - obs_vals)
+    bound_vec[, id] <- with(LCS_SSM[[id]], ifelse(is.finite(CI_upper) & is.finite(CI_lower), CI_upper - CI_lower, NA))
   }
   
   if (plot) {
@@ -804,7 +830,8 @@ evaluate_lcsssm <- function(LCS_SSM, sim_data, sim_al_data, plot = FALSE, plot_s
     mse = mse_vec,
     bias = bias_vec,
     ise = ise_vec,
-    ie = ie_vec
+    ie = ie_vec,
+    d_bound = bound_vec
   ))
 }
 
@@ -849,12 +876,58 @@ plot_metric_s2 <- function(metric_type, df = metrics_long) {
     theme_minimal(base_size = 14)
 }
 
+plot_d_bound_comparison <- function(d_bound_fda, d_bound_lcs, n_time) {
+  
+  compute_summary_df <- function(d_bound_matrix, method_name, n_time) {
+    data <- data.frame(
+      Time = n_time,
+      Mean = NA_real_,
+      CI_lower = NA_real_,
+      CI_upper = NA_real_,
+      Method = method_name
+    )
+    
+    for (t in 1:length(n_time)) {
+      vals <- d_bound_matrix[t, ]
+      vals <- vals[is.finite(vals)]
+      n_vals <- length(vals)
+      
+      if (n_vals > 0) {
+        mean_val <- mean(vals)
+        se <- if (n_vals > 1) sd(vals) / sqrt(n_vals) else 0
+        t_crit <- if (n_vals > 1) qt(0.975, df = n_vals - 1) else NA
+        
+        data$Mean[t] <- mean_val
+        data$CI_lower[t] <- if (!is.na(t_crit)) mean_val - t_crit * se else NA
+        data$CI_upper[t] <- if (!is.na(t_crit)) mean_val + t_crit * se else NA
+      }
+    }
+    
+    return(data)
+  }
+  
+  df_fda <- compute_summary_df(d_bound_fda, "FDA", n_time)
+  df_lcs <- compute_summary_df(d_bound_lcs, "LCS", n_time)
+  plot_df <- rbind(df_fda, df_lcs)
+  
+  ggplot(plot_df, aes(x = Time, y = Mean, color = Method, fill = Method)) +
+    geom_line(size = 1) +
+    geom_ribbon(aes(ymin = CI_lower, ymax = CI_upper), alpha = 0.2, linetype = 0) +
+    labs(title = "95% CI of Error Bound Width: FDA vs LCS",
+         x = "Age", y = "Width of Error Bound") +
+    scale_color_manual(values = c("FDA" = "blue", "LCS" = "darkred")) +
+    scale_fill_manual(values = c("FDA" = "blue", "LCS" = "darkred")) +
+    theme_minimal(base_size = 14)
+}
+
+
 compare_fda_lcs <- function(results, results2, LCS_SSM, 
                             plot = TRUE, plot_subjects = NULL) {
   library(dplyr)
   library(tidyr)
   library(ggplot2)
   n_subj <- length(LCS_SSM)
+  tfine <- LCS_SSM[[1]]$age
   
   metrics_df <- data.frame(
     subject = seq_len(n_subj),
@@ -915,7 +988,12 @@ compare_fda_lcs <- function(results, results2, LCS_SSM,
     print(plot_metric_s2("Bias", metrics_long))
     print(plot_metric_s2("IE", metrics_long))
     print(plot_metric_s2("ISE", metrics_long))
+    
+    error_bound_plot <- plot_d_bound_comparison(results$d_bound, results2$d_bound, tfine)
+    print(error_bound_plot)
   }
   
-  return(metrics_df)
+  return(list(metrics_df,
+              DB_FDA = results$d_bound,
+              DB_LCS = results2$d_bound))
 }

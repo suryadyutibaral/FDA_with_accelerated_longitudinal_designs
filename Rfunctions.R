@@ -3,7 +3,12 @@ simulate_exponential_decay <- function(n_subjects = 500,
                                        mu_L = 50, sd_L = 1,
                                        mu_a = 50, sd_a = 1,
                                        mu_k = 0.5, sd_k = 0.1,
-                                       noise = 0.1) {
+                                       noise = 0.1,
+                                       subgrp = 0) {
+  
+  # Validate subgrp input
+  if (subgrp < 0 || subgrp > 1) stop("`subgrp` must be between 0 and 1.")
+  
   # Bounds for asymptote check
   L_lower <- 0.5 * mu_L
   L_upper <- 1.5 * mu_L
@@ -38,6 +43,22 @@ simulate_exponential_decay <- function(n_subjects = 500,
     }
   }
   
+  # --- Apply slow decay to subgrp% of subjects ---
+  # Generalized slow decay for arbitrary base
+  apply_slow_decay <- function(base, x, A = 0.06, k = 1, center = 10) {
+    S <- 1 / (1 + exp(-k * (x - center)))
+    base - A * (x - center)^2 * S
+  }
+
+  # Determine which subjects to modify
+  n_modify <- floor(subgrp * n_subjects)
+  modify_idx <- sample(n_subjects, n_modify)
+
+  for (i in modify_idx) {
+    Y_no_noise[, i] <- apply_slow_decay(Y_no_noise[, i], x)
+    Y[, i] <- Y_no_noise[, i] + rnorm(length(x), sd = noise)
+  }
+
   # Return as list
   Ly_true <- lapply(seq_len(n_subjects), function(i) Y_no_noise[, i])
   Lt_true <- lapply(seq_len(n_subjects), function(i) x)
@@ -50,7 +71,8 @@ simulate_exponential_decay <- function(n_subjects = 500,
     L = L_vals,
     Y_no_noise = Y_no_noise,
     Lt_true = Lt_true,
-    Ly_true = Ly_true
+    Ly_true = Ly_true,
+    slow_decay_subjects = modify_idx
   ))
 }
 

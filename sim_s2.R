@@ -46,7 +46,7 @@ run_fda_lcs_simulation <- function(i = 1, n_subj = 100, n_time_points = 2,
   
   # LCS-CT-SSM
   data <- convert_to_full_subject_list(sim_al_data)
-  LCS_SSM <- run_full_kalman_simulation(data)
+  LCS_SSM <- run_full_kalman_simulation(data, sim_data)
   
   results2 <- suppressWarnings(evaluate_lcsssm(LCS_SSM, sim_data, sim_al_data, plot = FALSE))
   
@@ -65,51 +65,39 @@ n_time_points_vec <- c(2, 3)
 data_gen_vec <- c("homogeneous", "heterogeneous", "functional_heterogeneous")
 iters <- 1:10
 
-# Create full design grid
-param_grid <- cross_df(list(
-  n_subj = n_subj_vec,
-  n_time_points = n_time_points_vec,
-  data_gen = data_gen_vec
-))
-
 # Create a results tibble
-result_tbl2 <- tibble()
+result_tbl2 <- tibble(iter = iters)
 
 # Loop over all parameter combinations
-for (row in 1:nrow(param_grid)) {
-  params <- param_grid[row, ]
-  n_subj <- params$n_subj
-  n_time_points <- params$n_time_points
-  data_gen <- params$data_gen
-  
-  col_name <- paste("n", n_subj, "_t", n_time_points, "_", data_gen, sep = "")
-  message("Starting ", col_name)
-  
-  result_tbl2[[col_name]] <- map(iters, function(i) {
-    message("  Iteration ", i, " for ", col_name)
-    
-    tryCatch(
-      run_fda_lcs_simulation(
-        i = i,
-        n_subj = n_subj,
-        n_time_points = n_time_points,
-        data_gen = data_gen
-      ),
-      error = function(e) {
-        message("    Error at iter ", i, ": ", conditionMessage(e))
-        return(NA)
-      }
-    )
-  })
+for (subject in n_subj_vec) {
+  for (time_point in n_time_points_vec) {
+    for(data_method in data_gen_vec){
+      
+      # Create column name for results
+      col_name <- paste0(data_method, "_n", subject, "_tp", time_point)
+      
+      # Print start of this condition
+      message("Starting simulations for data method = ", data_method, ", n = ", subject, ", tp = ", time_point)
+      
+      # Run run_fda_lcs_simulation for all iterations with progress message
+      result_tbl2[[col_name]] <- map(iters, function(i) {
+        message("  Iteration ", i, " for ", data_method, "_n", subject, "_tp", time_point)
+        
+        # Wrap run_fda_lcs_simulation in tryCatch to handle errors
+        tryCatch(
+          run_fda_lcs_simulation(i = i, n_subj = subject, n_time_points = time_point, data_gen = data_method, cores = 24),
+          error = function(e) {
+            message("    Error at iter ", i, ": ", conditionMessage(e))
+            return(NA)
+          }
+        )
+      })
+    }
+  }
 }
-
+   
 # Save results
 saveRDS(result_tbl2, file = "~/FDA_with_accelerated_longitudinal_designs/result_tbl2.rds")
 
-# End timer
 end <- Sys.time()
-end - begin
-
-
-end = Sys.time()
 end - begin

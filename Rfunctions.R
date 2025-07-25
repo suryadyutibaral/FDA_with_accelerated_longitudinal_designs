@@ -643,7 +643,7 @@ simulate_one_kalman_path <- function(id) {
 
 
 # Main execution
-run_full_kalman_simulation <- function(data, parallel = TRUE) {
+run_full_kalman_simulation <- function(data, sim_data, parallel = TRUE) {
   multiSubjODERun <<- fit_multisubj_ct_model(data)
   n_subj <- length(data)
   

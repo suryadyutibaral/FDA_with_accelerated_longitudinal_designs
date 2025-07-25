@@ -22,7 +22,7 @@ age <- 0:19
 tfine <-  seq(0, 19, length.out = 240)
 method <- "normal"
 rep_cond <- 4
-sim_data <- simulate_exponential_decay(n_subjects = n_subj, x = tfine, noise = .1)
+sim_data <- simulate_exponential_decay(n_subjects = n_subj, x = tfine, noise = .1, sd_L = 5, sd_a = 5)
 
 matplot(sim_data$x, sim_data$trajectories[, 1:n_subj], type = "l", lty = 1,
         ylab = "y", xlab = "Time", main = "Exponential Decay Trajectories")

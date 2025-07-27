@@ -16,20 +16,32 @@ begin = Sys.time()
 source("~/FDA_with_accelerated_longitudinal_designs/ldm.R")
 source("~/FDA_with_accelerated_longitudinal_designs/kerFctn.R")
 source("~/FDA_with_accelerated_longitudinal_designs/Rfunctions.R")
-set.seed(8)
-n_subj = 250
+set.seed(1)
+n_subj = 100
+n_tp = 2
+data_gen = "homogeneous"
+
 age <- 0:19
 tfine <-  seq(0, 19, length.out = 240)
 method <- "normal"
 rep_cond <- 4
-sim_data <- simulate_exponential_decay(n_subjects = n_subj, x = tfine, noise = .1, sd_L = 5, sd_a = 5)
+
+if (data_gen == "homogeneous") {
+  sim_data <- simulate_exponential_decay(n_subjects = n_subj, x = tfine, noise = 0.1)
+} else if (data_gen == "heterogeneous") {
+  sim_data <- simulate_exponential_decay(n_subjects = n_subj, x = tfine, noise = 0.1, sd_L = 5, sd_a = 5)
+} else if (data_gen == "functional_heterogeneous") {
+  sim_data <- simulate_exponential_decay(n_subjects = n_subj, x = tfine, noise = 0.1, subgrp = 0.5)
+} else {
+  stop("Unknown data_gen type: must be 'homogeneous', 'heterogeneous', or 'functional_heterogeneous'")
+}
 
 matplot(sim_data$x, sim_data$trajectories[, 1:n_subj], type = "l", lty = 1,
         ylab = "y", xlab = "Time", main = "Exponential Decay Trajectories")
 
 ```
 ```{r}
-sim_al_data <- simulate_accelerated_longitudinal(Y_full = sim_data$trajectories, n_time_points = 2)
+sim_al_data <- simulate_accelerated_longitudinal(Y_full = sim_data$trajectories, n_time_points = n_tp)
 
 # Plot sparse trajectories
 matplot(sim_al_data$x_full, sim_al_data$Y_full, type = "l", lty = 2,
@@ -89,7 +101,7 @@ mean(results$bias_all)
 
 ```{r}
 data <- convert_to_full_subject_list(sim_al_data)
-LCS_SSM <- run_full_kalman_simulation(data)
+LCS_SSM <- run_full_kalman_simulation(data, sim_data = sim_data)
 ```
 ```{r}
 results2 <- suppressWarnings(evaluate_lcsssm(LCS_SSM, sim_data, sim_al_data, plot = TRUE))

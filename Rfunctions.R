@@ -648,7 +648,7 @@ run_full_kalman_simulation <- function(data, sim_data, parallel = TRUE) {
   n_subj <- length(data)
   
   if (parallel) {
-    num_cores <- detectCores() - 1
+    num_cores <- detectCores() - 4
     cl <- makeCluster(num_cores)
     clusterExport(cl, varlist = c("multiSubjODERun", "data", "simulate_one_kalman_path", "sim_data"), envir = environment())
     LCS_SSM <- parLapply(cl, 1:n_subj, simulate_one_kalman_path)

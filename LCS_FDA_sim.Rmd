@@ -16,16 +16,17 @@ begin = Sys.time()
 source("~/FDA_with_accelerated_longitudinal_designs/ldm.R")
 source("~/FDA_with_accelerated_longitudinal_designs/kerFctn.R")
 source("~/FDA_with_accelerated_longitudinal_designs/Rfunctions.R")
-set.seed(1)
-n_subj = 100
-n_tp = 2
-data_gen = "homogeneous"
+seedid = 1
+n_subj = 500
+n_tp = 3
+data_gen = "heterogeneous"
 
 age <- 0:19
 tfine <-  seq(0, 19, length.out = 240)
 method <- "normal"
 rep_cond <- 4
 
+set.seed(seedid)
 if (data_gen == "homogeneous") {
   sim_data <- simulate_exponential_decay(n_subjects = n_subj, x = tfine, noise = 0.1)
 } else if (data_gen == "heterogeneous") {
@@ -116,7 +117,26 @@ mean(results2$bias)
 metrics_df<-suppressWarnings(compare_fda_lcs(results, results2, LCS_SSM, plot = TRUE))
 ```
 
+
 ```{r}
 end = Sys.time()
 end - begin
+```
+
+```{r eval=FALSE, include=FALSE}
+result_list <- list(
+  Metrics = metrics_df$metrics,
+  DB_FDA = metrics_df$DB_FDA,
+  DB_LCS = metrics_df$DB_LCS
+)
+col_name <- paste0(data_gen, "_n", n_subj, "_tp", n_tp)
+# Check if the entry is NULL or NA, then assign it
+if (is.null(result_tbl2[[col_name]][[seedid]]) ||
+    all(is.na(result_tbl2[[col_name]][[seedid]]))) {
+  
+  result_tbl2[[col_name]][[seedid]] <- result_list
+}
+result_tbl2[,14:19]
+
+saveRDS(result_tbl2, file = "~/FDA_with_accelerated_longitudinal_designs/result_tbl2.rds")
 ```

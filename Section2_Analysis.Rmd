@@ -1,0 +1,62 @@
+---
+title: "Section 2 Analysis"
+author: "Suryadyuti Baral"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(tibble)
+library(dplyr)
+result_tbl2 <- readRDS("result_tbl2.rds")
+```
+
+
+```{r}
+# Step 1: Remove seed column and reshape to long format
+result_long <- result_tbl2 %>%
+  select(-1) %>%
+  pivot_longer(cols = everything(), names_to = "condition", values_to = "content")
+
+# Step 2: Identify completely empty lists
+result_long_processed <- result_long %>%
+  mutate(
+    is_empty_list = map_lgl(content, ~ is.null(.x) || !is.list(.x) || length(.x) == 0),
+    Metrics = map(content, ~ if (is.list(.x) && "Metrics" %in% names(.x)) .x$Metrics else NULL)
+  ) %>%
+  select(condition, Metrics, is_empty_list)
+
+# Step 3: Count how many empty lists per condition
+empty_counts <- result_long_processed %>%
+  filter(is_empty_list) %>%
+  count(condition, name = "empty_count")
+
+# Step 4: Unnest non-empty Metrics
+metrics_df <- result_long_processed %>%
+  filter(!is_empty_list) %>%
+  select(-is_empty_list) %>%
+  unnest(Metrics)
+
+# Step 5: Rename columns
+colnames(metrics_df) <- c(
+  "condition", "subject", 
+  "bias_fda", "mse_fda", "ise_fda", "ie_fda", 
+  "bias_lcs", "mse_lcs", "ise_lcs", "ie_lcs"
+)
+
+# Step 6: Summarize metrics by condition
+summary_stats <- metrics_df %>%
+  pivot_longer(cols = -c(condition, subject), names_to = "metric", values_to = "value") %>%
+  group_by(condition, metric) %>%
+  summarise(
+    mean = round(mean(value, na.rm = TRUE), 3),
+    sd = round(sd(value, na.rm = TRUE), 3),
+    .groups = "drop"
+  )
+
+empty_counts
+summary_stats
+```
+
+

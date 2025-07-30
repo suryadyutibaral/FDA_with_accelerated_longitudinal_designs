@@ -911,7 +911,7 @@ plot_d_bound_comparison <- function(d_bound_fda, d_bound_lcs, n_time) {
     
     for (t in 1:length(n_time)) {
       vals <- d_bound_matrix[t, ]
-      vals <- vals[is.finite(vals)]
+      vals <- vals[is.finite(vals) & vals < 1e5]
       n_vals <- length(vals)
       
       if (n_vals > 0) {

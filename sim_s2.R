@@ -63,7 +63,7 @@ run_fda_lcs_simulation <- function(i = 1, n_subj = 100, n_time_points = 2,
 n_subj_vec <- c(100, 250, 500)
 n_time_points_vec <- c(2, 3)
 data_gen_vec <- c("homogeneous", "heterogeneous", "functional_heterogeneous")
-iters <- 1:10
+iters <- 1:60
 
 # Create a results tibble
 result_tbl2 <- tibble(iter = iters)
@@ -97,7 +97,7 @@ for (subject in n_subj_vec) {
 }
    
 # Save results
-saveRDS(result_tbl2, file = "~/FDA_with_accelerated_longitudinal_designs/result_tbl2.rds")
+saveRDS(result_tbl2, file = "~/FDA_with_accelerated_longitudinal_designs/result_tbl2_updates.rds")
 
 end <- Sys.time()
 end - begin

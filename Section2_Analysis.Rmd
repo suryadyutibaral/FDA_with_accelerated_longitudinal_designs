@@ -17,7 +17,7 @@ result_tbl2 <- readRDS("result_tbl2.rds")
 ```{r}
 # Step 1: Remove seed column and reshape to long format
 result_long <- result_tbl2 %>%
-  select(-1) %>%
+  dplyr::select(-1) %>%
   pivot_longer(cols = everything(), names_to = "condition", values_to = "content")
 
 # Step 2: Identify completely empty lists
@@ -28,17 +28,23 @@ result_long_processed <- result_long %>%
       if (is.list(.x) && "Metrics" %in% names(.x)) .x$Metrics else NULL
     })
   ) %>%
-  select(condition, Metrics, is_empty_list)
+  dplyr::select(condition, Metrics, is_empty_list)
 
-# Step 3: Count how many empty lists per condition
+# Step 3: Count how many empty lists per condition and list row numbers
 empty_counts <- result_long_processed %>%
+  mutate(seed_group = (row_number() - 1) %/% 18 + 1) %>%
   filter(is_empty_list) %>%
-  count(condition, name = "empty_count")
+  group_by(condition) %>%
+  summarise(
+    empty_count = n(),
+    seeds = paste(seed_group, collapse = ","),
+    .groups = "drop"
+  )
 
 # Step 4: Unnest non-empty Metrics
 metrics_df <- result_long_processed %>%
   filter(!is_empty_list) %>%
-  select(-is_empty_list) %>%
+  dplyr::select(-is_empty_list) %>%
   unnest(Metrics)
 
 # Step 5: Summarize metrics by condition with values > 10^5 replaced by NA

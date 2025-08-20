@@ -17,7 +17,7 @@ begin = Sys.time()
 source("~/FDA_with_accelerated_longitudinal_designs/ldm.R")
 source("~/FDA_with_accelerated_longitudinal_designs/kerFctn.R")
 source("~/FDA_with_accelerated_longitudinal_designs/Rfunctions.R")
-set.seed(8)
+set.seed(35)
 n_subj = 250
 age <- 0:19
 tfine <-  seq(0, 19, length.out = 240)

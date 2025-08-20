@@ -102,8 +102,8 @@ for (method in methods) {
   }
 }
 
-saveRDS(result_tbl, file = "~/FDA_with_accelerated_longitudinal_designs/result_tbl2")
-result_tbl2 <- readRDS(file = "~/FDA_with_accelerated_longitudinal_designs/result_tbl2")
+saveRDS(result_tbl, file = "~/FDA_with_accelerated_longitudinal_designs/result_tbl2_updates")
+result_tbl2 <- readRDS(file = "~/FDA_with_accelerated_longitudinal_designs/result_tbl2_updates")
 
 end = Sys.time()
 end - begin

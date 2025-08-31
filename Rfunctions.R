@@ -687,7 +687,7 @@ convert_to_full_subject_list <- function(sim_al_data) {
   return(full_data_list)
 }
 
-evaluate_lcsssm <- function(LCS_SSM, sim_data, sim_al_data, plot = FALSE, plot_subjects = NULL) {
+evaluate_lcsssm <- function(LCS_SSM, sim_data = NULL, sim_al_data, plot = FALSE, plot_subjects = NULL) {
   library(dplyr)
   library(ggplot2)
   library(tibble)
@@ -697,7 +697,7 @@ evaluate_lcsssm <- function(LCS_SSM, sim_data, sim_al_data, plot = FALSE, plot_s
   n_subj <- length(LCS_SSM)
   tfine <- sim_al_data$x_full
   
-  # Helper functions
+  # --- Helper functions ---
   calc_ise <- function(true_phi, est_phi, tfine) {
     if (is.vector(true_phi)) true_phi <- matrix(true_phi, ncol = 1)
     if (is.vector(est_phi)) est_phi <- matrix(est_phi, ncol = 1)
@@ -716,72 +716,75 @@ evaluate_lcsssm <- function(LCS_SSM, sim_data, sim_al_data, plot = FALSE, plot_s
     })
   }
   
-  mse_vec <- numeric(n_subj)
-  bias_vec <- numeric(n_subj)
-  ise_vec <- numeric(n_subj)
-  ie_vec <- numeric(n_subj)
+  # --- Storage ---
+  mse_vec  <- rep(NA, n_subj)
+  bias_vec <- rep(NA, n_subj)
+  ise_vec  <- rep(NA, n_subj)
+  ie_vec   <- rep(NA, n_subj)
   bound_vec <- matrix(NA, nrow = length(tfine), ncol = n_subj)
   
+  # --- Loop over subjects ---
   for (id in seq_len(n_subj)) {
     ks <- LCS_SSM[[id]]$y_KS
-    true_traj <- sim_data$Y_no_noise[, id]
     
-    ise_vec[id] <- calc_ise(true_traj, ks, tfine)
-    ie_vec[id] <- calc_ie(true_traj, ks, tfine)
+    # ISE/IE only if truth available
+    if (!is.null(sim_data)) {
+      true_traj <- sim_data$Y_no_noise[, id]
+      ise_vec[id] <- calc_ise(true_traj, ks, tfine)
+      ie_vec[id]  <- calc_ie(true_traj, ks, tfine)
+    }
     
+    # Observed values
     obs_ages <- LCS_SSM[[id]]$age[!is.na(LCS_SSM[[id]]$y_observed)]
     obs_vals <- LCS_SSM[[id]]$y_observed[!is.na(LCS_SSM[[id]]$y_observed)]
     if (length(obs_vals) == 0) next
     
-    true_vals_at_obs <- approx(x = tfine, y = true_traj, xout = obs_ages, rule = 2)$y
-    ks_vals_at_obs   <- approx(x = tfine, y = ks, xout = obs_ages, rule = 2)$y
-    
-    mse_vec[id] <- mean((true_vals_at_obs - obs_vals)^2)
+    ks_vals_at_obs <- approx(x = tfine, y = ks, xout = obs_ages, rule = 2)$y
+    mse_vec[id]  <- mean((ks_vals_at_obs - obs_vals)^2)
     bias_vec[id] <- mean(ks_vals_at_obs - obs_vals)
-    bound_vec[, id] <- with(LCS_SSM[[id]], ifelse(is.finite(CI_upper) & is.finite(CI_lower), CI_upper - CI_lower, NA))
+    
+    # Bounds
+    bound_vec[, id] <- with(LCS_SSM[[id]], 
+                            ifelse(is.finite(CI_upper) & is.finite(CI_lower), 
+                                   CI_upper - CI_lower, NA))
   }
   
+  # --- Plotting ---
   if (plot) {
-    # 1. Subject-level plot for selected subjects
+    # Subject-level plots
     if (is.null(plot_subjects)) {
       plot_subjects <- sample(seq_len(n_subj), min(5, n_subj))
     }
     
     for (id in plot_subjects) {
       df_subj <- LCS_SSM[[id]]
-
+      
       df_plot <- df_subj |>
         dplyr::mutate(
-          `Kalman Upper` = CI_upper,
-          `Kalman Lower` = CI_lower,
+          `Kalman Upper`   = CI_upper,
+          `Kalman Lower`   = CI_lower,
           `Kalman Smoothed` = y_KS,
-          `True` = y_true,
-          `Observed` = y_observed
+          `Observed`       = y_observed,
+          `True`           = if (!is.null(sim_data)) y_true else NA
         )
       
       p <- ggplot(data = df_plot, aes(x = age)) +
-        
-        # Confidence ribbon
         geom_ribbon(aes(ymin = CI_lower, ymax = CI_upper, fill = "95% CI"),
                     alpha = 0.15, show.legend = TRUE) +
-        
-        # Kalman CI bounds
         geom_line(aes(y = CI_upper, color = "95% CI Bounds"), size = 0.2) +
         geom_line(aes(y = CI_lower, color = "95% CI Bounds"), size = 0.2) +
-        
-        # Kalman-smoothed line
         geom_line(aes(y = y_KS, color = "Kalman Smoothed"),
                   size = 0.8, linetype = "dashed") +
-        
-        # Observed points and line
         geom_point(aes(y = y_observed, color = "Observed"), size = 2) +
         geom_line(data = df_plot[!is.na(df_plot$y_observed), ],
-                  aes(y = y_observed, color = "Observed"), size = 0.5) +
-        
-        # True latent line
-        geom_line(aes(y = y_true, color = "True"), size = 0.8) +
-        
-        # Manual color and fill scales
+                  aes(y = y_observed, color = "Observed"), size = 0.5)
+      
+      # Add true trajectory if available
+      if (!is.null(sim_data)) {
+        p <- p + geom_line(aes(y = y_true, color = "True"), size = 0.8)
+      }
+      
+      p <- p +
         scale_color_manual(name = "Legend",
                            values = c("Observed" = "black",
                                       "Kalman Smoothed" = "blue",
@@ -789,11 +792,11 @@ evaluate_lcsssm <- function(LCS_SSM, sim_data, sim_al_data, plot = FALSE, plot_s
                                       "95% CI Bounds" = "blue")) +
         scale_fill_manual(name = "Legend",
                           values = c("95% CI" = "blue")) +
-        
         scale_x_continuous(breaks = seq(0, 20, 1)) +
         ylab("y scores") + 
         xlab("Age") +
-        ggtitle(paste("Subject", id, "- Kalman Smoothed vs Observed and True")) +
+        ggtitle(paste("Subject", id, "- Kalman Smoothed vs Observed",
+                      ifelse(!is.null(sim_data), "and True", ""))) +
         theme_minimal() +
         theme(legend.position = "bottom",
               legend.title = element_blank())
@@ -801,13 +804,13 @@ evaluate_lcsssm <- function(LCS_SSM, sim_data, sim_al_data, plot = FALSE, plot_s
       print(p)
     }
     
-    # 2. Error metric boxplots
+    # Error metric boxplots
     results_df <- data.frame(
-      Subject = seq_along(ise_vec),
-      ISE = ise_vec,
-      IE = ie_vec,
-      MSE = mse_vec,
-      Bias = bias_vec
+      Subject = seq_len(n_subj),
+      MSE  = mse_vec,
+      Bias = bias_vec,
+      ISE  = ise_vec,
+      IE   = ie_vec
     )
     
     df_long <- results_df %>%

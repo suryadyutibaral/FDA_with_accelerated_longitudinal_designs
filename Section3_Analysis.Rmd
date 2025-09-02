@@ -11,27 +11,45 @@ output:
 
 ```{r}
 library(data.table)
-ald_dat <- fread("~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/Dissertation_Selection.csv", na.strings = ".")
+
+# Load data
+ald_dat <- fread(
+  "~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/Dissertation_Selection.csv",
+  na.strings = "."
+)
 
 # Setup
 response_vars <- c("GF1", "GF2")
 time_vars <- c("age1", "age2")
 
-# Remove rows where any age < 5 and >22
-valid_indices <- apply(ald_dat[, ..time_vars], 1, function(row) all(is.na(row) | row >= 5 & row <= 22))
+# Step 1: Filter rows where all non-missing ages are between 5 and 22
+valid_indices <- apply(ald_dat[, ..time_vars], 1, function(row) all(is.na(row) | (row >= 5 & row <= 22)))
 ald_dat <- ald_dat[valid_indices]
 
-# Construct Lt and Ly using lapply (with -500 shift)
+# Step 2: Construct Lt and Ly with -500 shift, check count >= 2
 tmp <- lapply(1:nrow(ald_dat), function(i) {
   y <- unlist(ald_dat[i, ..response_vars])
   t <- unlist(ald_dat[i, ..time_vars])
-  keep <- !(is.na(y) | is.na(t))
-  list(Ly = y[keep] - 500, Lt = t[keep])
+  
+  keep <- !(is.na(y) | is.na(t))  # keep only valid pairs
+  y <- y[keep]
+  t <- t[keep]
+  
+  if (length(y) >= 2) {
+    list(Ly = y - 500, Lt = t)
+  } else {
+    NULL  # discard subjects with < 2 values
+  }
 })
+
+# Step 3: Drop NULL entries (subjects with < 2 values)
+tmp <- Filter(Negate(is.null), tmp)
+
+# Step 4: Extract Ly and Lt
 Ly <- lapply(tmp, `[[`, "Ly")
 Lt <- lapply(tmp, `[[`, "Lt")
 
-# Prepare for modeling
+# Step 5: Prepare for modeling
 unique_ages <- sort(unique(unlist(Lt)))
 first_fr_scores <- na.omit(sapply(Ly, function(y) if (length(y)) y[1] else NA))
 sort(unique_ages)
@@ -53,7 +71,20 @@ saveRDS(acd_fda_2, file = "~/FDA_with_accelerated_longitudinal_designs/dissertat
 ```
 
 ```{r}
-results <- evaluate_simulations(tfine = seq(5,22, length.out = 18*12), sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL, acd_fda_2 = acd_fda_2, plot = TRUE)
+results <- evaluate_simulations(tfine = seq(5,22, length.out = 18*12), 
+                                sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL, 
+                                acd_fda_2 = acd_fda_2, plot = TRUE, 
+                                plot_subjects = c(38, 438))
+```
+```{r}
+sim_al_data <- list(Ly = Ly, Lt = Lt, x_full = seq(5,22, length.out = 18*12))
+data <- convert_to_full_subject_list(sim_al_data)
+LCS_SSM <- run_full_kalman_simulation(data, sim_data = NULL)
+results2 <- suppressWarnings(evaluate_lcsssm(LCS_SSM, sim_data = NULL, 
+                                             sim_al_data, plot = TRUE,
+                                             plot_subjects = c(38, 438)))
+
+saveRDS(LCS_SSM, file = "~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/GF_dissertation_ALD_sim_curves.rds")
 ```
 
 
@@ -62,27 +93,45 @@ results <- evaluate_simulations(tfine = seq(5,22, length.out = 18*12), sim_al_da
 ald_dat <- fread("C:/Users/sonnet/Box/FDA/Emilio_dissertation/Dissertation_Selection.csv", na.strings = ".")
 response_vars <- c("GAK1", "GAK2")
 
-# Remove rows where any age < 5 and >22
-valid_indices <- apply(ald_dat[, ..time_vars], 1, function(row) all(is.na(row) | row >= 5 & row <= 22))
+# Step 1: Filter rows where all non-missing ages are between 5 and 22
+valid_indices <- apply(ald_dat[, ..time_vars], 1, function(row) all(is.na(row) | (row >= 5 & row <= 22)))
 ald_dat <- ald_dat[valid_indices]
 
-# Construct Lt and Ly using lapply (with -500 shift)
+# Step 2: Construct Lt and Ly with -500 shift, check count >= 2
 tmp <- lapply(1:nrow(ald_dat), function(i) {
   y <- unlist(ald_dat[i, ..response_vars])
   t <- unlist(ald_dat[i, ..time_vars])
-  keep <- !(is.na(y) | is.na(t))
-  list(Ly = y[keep] - 500, Lt = t[keep])
+  
+  keep <- !(is.na(y) | is.na(t))  # keep only valid pairs
+  y <- y[keep]
+  t <- t[keep]
+  
+  if (length(y) >= 2) {
+    list(Ly = y - 500, Lt = t)
+  } else {
+    NULL  # discard subjects with < 2 values
+  }
 })
+
+# Step 3: Drop NULL entries (subjects with < 2 values)
+tmp <- Filter(Negate(is.null), tmp)
+
+# Step 4: Extract Ly and Lt
 Ly <- lapply(tmp, `[[`, "Ly")
 Lt <- lapply(tmp, `[[`, "Lt")
 
-# Prepare for modeling
+# Step 5: Prepare for modeling
 unique_ages <- sort(unique(unlist(Lt)))
 first_fr_scores <- na.omit(sapply(Ly, function(y) if (length(y)) y[1] else NA))
 sort(unique_ages)
 ```
 
 ```{r}
+# Load model code
+source("~/FDA_with_accelerated_longitudinal_designs/ldm.R")
+source("~/FDA_with_accelerated_longitudinal_designs/kerFctn.R")
+source("~/FDA_with_accelerated_longitudinal_designs/Rfunctions.R")
+
 # Fit model with regular time grid
 set.seed(1)
 age <- 5:22
@@ -91,36 +140,69 @@ acd_fda_2 <- ldm(Ly, Lt, z02, age, optns = list(M = nrow(z02), cores = 24, regul
 
 saveRDS(acd_fda_2, file = "~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/GAK_dissertation_ALD_sim_curves.rds")
 ```
+
 ```{r}
-results <- evaluate_simulations(tfine = seq(5,22, length.out = 18*12), sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL, acd_fda_2 = acd_fda_2, plot = TRUE)
+results <- evaluate_simulations(tfine = seq(5,22, length.out = 18*12), 
+                                sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL, 
+                                acd_fda_2 = acd_fda_2, plot = TRUE, 
+                                plot_subjects = c(79, 154, 464, 461))
 ```
+```{r}
+sim_al_data <- list(Ly = Ly, Lt = Lt, x_full = seq(5,22, length.out = 18*12))
+data <- convert_to_full_subject_list(sim_al_data)
+LCS_SSM <- run_full_kalman_simulation(data, sim_data = NULL)
+results2 <- suppressWarnings(evaluate_lcsssm(LCS_SSM, sim_data = NULL, 
+                                             sim_al_data, plot = TRUE,
+                                             plot_subjects = c(79, 154, 464, 461)))
+saveRDS(LCS_SSM, file = "~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/GAK_dissertation_ALD_LCS.rds")
+```
+
+
 
 ### GC
 ```{r}
 ald_dat <- fread("C:/Users/sonnet/Box/FDA/Emilio_dissertation/Dissertation_Selection.csv", na.strings = ".")
 response_vars <- c("GC1", "GC2")
 
-# Remove rows where any age < 5 and >22
-valid_indices <- apply(ald_dat[, ..time_vars], 1, function(row) all(is.na(row) | row >= 5 & row <= 22))
+# Step 1: Filter rows where all non-missing ages are between 5 and 22
+valid_indices <- apply(ald_dat[, ..time_vars], 1, function(row) all(is.na(row) | (row >= 5 & row <= 22)))
 ald_dat <- ald_dat[valid_indices]
 
-# Construct Lt and Ly using lapply (with -500 shift)
+# Step 2: Construct Lt and Ly with -500 shift, check count >= 2
 tmp <- lapply(1:nrow(ald_dat), function(i) {
   y <- unlist(ald_dat[i, ..response_vars])
   t <- unlist(ald_dat[i, ..time_vars])
-  keep <- !(is.na(y) | is.na(t))
-  list(Ly = y[keep] - 500, Lt = t[keep])
+  
+  keep <- !(is.na(y) | is.na(t))  # keep only valid pairs
+  y <- y[keep]
+  t <- t[keep]
+  
+  if (length(y) >= 2) {
+    list(Ly = y - 500, Lt = t)
+  } else {
+    NULL  # discard subjects with < 2 values
+  }
 })
+
+# Step 3: Drop NULL entries (subjects with < 2 values)
+tmp <- Filter(Negate(is.null), tmp)
+
+# Step 4: Extract Ly and Lt
 Ly <- lapply(tmp, `[[`, "Ly")
 Lt <- lapply(tmp, `[[`, "Lt")
 
-# Prepare for modeling
+# Step 5: Prepare for modeling
 unique_ages <- sort(unique(unlist(Lt)))
 first_fr_scores <- na.omit(sapply(Ly, function(y) if (length(y)) y[1] else NA))
 sort(unique_ages)
 ```
 
 ```{r}
+# Load model code
+source("~/FDA_with_accelerated_longitudinal_designs/ldm.R")
+source("~/FDA_with_accelerated_longitudinal_designs/kerFctn.R")
+source("~/FDA_with_accelerated_longitudinal_designs/Rfunctions.R")
+
 # Fit model with regular time grid
 set.seed(1)
 age <- 5:22
@@ -129,36 +211,69 @@ acd_fda_2 <- ldm(Ly, Lt, z02, age, optns = list(M = nrow(z02), cores = 24, regul
 
 saveRDS(acd_fda_2, file = "~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/GC_dissertation_ALD_sim_curves.rds")
 ```
+
 ```{r}
-results <- evaluate_simulations(tfine = seq(5,22, length.out = 18*12), sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL, acd_fda_2 = acd_fda_2, plot = TRUE)
+results <- evaluate_simulations(tfine = seq(5,22, length.out = 18*12), 
+                                sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL, 
+                                acd_fda_2 = acd_fda_2, plot = TRUE, 
+                                plot_subjects = c(1, 96, 422))
 ```
+```{r}
+sim_al_data <- list(Ly = Ly, Lt = Lt, x_full = seq(5,22, length.out = 18*12))
+data <- convert_to_full_subject_list(sim_al_data)
+LCS_SSM <- run_full_kalman_simulation(data, sim_data = NULL)
+results2 <- suppressWarnings(evaluate_lcsssm(LCS_SSM, sim_data = NULL, 
+                                             sim_al_data, plot = TRUE,
+                                             plot_subjects = c(1, 96, 422)))
+
+saveRDS(LCS_SSM, file = "~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/GC_dissertation_ALD_LCS.rds")
+```
+
 
 ### GQ
 ```{r}
 ald_dat <- fread("C:/Users/sonnet/Box/FDA/Emilio_dissertation/Dissertation_Selection.csv", na.strings = ".")
 response_vars <- c("GQ1", "GQ2")
 
-# Remove rows where any age < 5 and >22
-valid_indices <- apply(ald_dat[, ..time_vars], 1, function(row) all(is.na(row) | row >= 5 & row <= 22))
+# Step 1: Filter rows where all non-missing ages are between 5 and 22
+valid_indices <- apply(ald_dat[, ..time_vars], 1, function(row) all(is.na(row) | (row >= 5 & row <= 22)))
 ald_dat <- ald_dat[valid_indices]
 
-# Construct Lt and Ly using lapply (with -500 shift)
+# Step 2: Construct Lt and Ly with -500 shift, check count >= 2
 tmp <- lapply(1:nrow(ald_dat), function(i) {
   y <- unlist(ald_dat[i, ..response_vars])
   t <- unlist(ald_dat[i, ..time_vars])
-  keep <- !(is.na(y) | is.na(t))
-  list(Ly = y[keep] - 500, Lt = t[keep])
+  
+  keep <- !(is.na(y) | is.na(t))  # keep only valid pairs
+  y <- y[keep]
+  t <- t[keep]
+  
+  if (length(y) >= 2) {
+    list(Ly = y - 500, Lt = t)
+  } else {
+    NULL  # discard subjects with < 2 values
+  }
 })
+
+# Step 3: Drop NULL entries (subjects with < 2 values)
+tmp <- Filter(Negate(is.null), tmp)
+
+# Step 4: Extract Ly and Lt
 Ly <- lapply(tmp, `[[`, "Ly")
 Lt <- lapply(tmp, `[[`, "Lt")
 
-# Prepare for modeling
+# Step 5: Prepare for modeling
 unique_ages <- sort(unique(unlist(Lt)))
 first_fr_scores <- na.omit(sapply(Ly, function(y) if (length(y)) y[1] else NA))
 sort(unique_ages)
 ```
 
 ```{r}
+# Load model code
+source("~/FDA_with_accelerated_longitudinal_designs/ldm.R")
+source("~/FDA_with_accelerated_longitudinal_designs/kerFctn.R")
+source("~/FDA_with_accelerated_longitudinal_designs/Rfunctions.R")
+
 # Fit model with regular time grid
 set.seed(1)
 age <- 5:22
@@ -167,11 +282,26 @@ acd_fda_2 <- ldm(Ly, Lt, z02, age, optns = list(M = nrow(z02), cores = 24, regul
 
 saveRDS(acd_fda_2, file = "~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/GQ_dissertation_ALD_sim_curves.rds")
 ```
+
 ```{r}
-results <- evaluate_simulations(tfine = seq(5,22, length.out = 18*12), sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL, acd_fda_2 = acd_fda_2, plot = TRUE)
+results <- evaluate_simulations(tfine = seq(5,22, length.out = 18*12), 
+                                sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL,
+                                acd_fda_2 = acd_fda_2, plot = TRUE, 
+                                plot_subjects = c(86, 461))
+```
+```{r}
+sim_al_data <- list(Ly = Ly, Lt = Lt, x_full = seq(5,22, length.out = 18*12))
+data <- convert_to_full_subject_list(sim_al_data)
+LCS_SSM <- run_full_kalman_simulation(data, sim_data = NULL)
+results2 <- suppressWarnings(evaluate_lcsssm(LCS_SSM, sim_data = NULL, 
+                                             sim_al_data, plot = TRUE,
+                                             plot_subjects = c(86, 461)))
+
+saveRDS(LCS_SSM, file = "~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/GQ_dissertation_ALD_LCS.rds")
 ```
 
-## NORA dataset
+
+### NORA dataset
 
 ```{r}
 ald_dat <- read.table(file = "C:/Users/sonnet/Box/FDA/nora_T3.dat", na.strings = ".", 
@@ -188,25 +318,37 @@ setDT(ald_dat)
 response_vars <- c("fr1", "fr2", "fr3")
 time_vars <- c("age1", "age2", "age3")
 
-# Remove rows where any age < 5 and >22
-valid_indices <- apply(ald_dat[, ..time_vars], 1, function(row) all(is.na(row) | row >= 7 & row <= 22))
+# Step 1: Filter rows where all non-missing ages are between 7 and 22
+valid_indices <- apply(ald_dat[, ..time_vars], 1, function(row) all(is.na(row) | (row >= 7 & row <= 22)))
 ald_dat <- ald_dat[valid_indices]
 
-# Construct Lt and Ly using lapply (with -500 shift)
+# Step 2: Construct Lt and Ly, check count >= 2
 tmp <- lapply(1:nrow(ald_dat), function(i) {
   y <- unlist(ald_dat[i, ..response_vars])
   t <- unlist(ald_dat[i, ..time_vars])
-  keep <- !(is.na(y) | is.na(t))
-  list(Ly = y[keep], Lt = t[keep])
+  
+  keep <- !(is.na(y) | is.na(t))  # keep only valid pairs
+  y <- y[keep]
+  t <- t[keep]
+  
+  if (length(y) >= 2) {
+    list(Ly = y, Lt = t)
+  } else {
+    NULL  # discard subjects with < 2 values
+  }
 })
+
+# Step 3: Drop NULL entries (subjects with < 2 values)
+tmp <- Filter(Negate(is.null), tmp)
+
+# Step 4: Extract Ly and Lt
 Ly <- lapply(tmp, `[[`, "Ly")
 Lt <- lapply(tmp, `[[`, "Lt")
 
-# Prepare for modeling
+# Step 5: Prepare for modeling
 unique_ages <- sort(unique(unlist(Lt)))
 first_fr_scores <- na.omit(sapply(Ly, function(y) if (length(y)) y[1] else NA))
 sort(unique_ages)
-
 ```
 
 ```{r}
@@ -220,5 +362,15 @@ acd_fda_2 <- ldm(Ly, Lt, z02, age, optns = list(M = nrow(z02), cores = 24, regul
 saveRDS(acd_fda_2, file = "~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/NORA_ALD_sim_curves.rds")
 ```
 ```{r}
-results <- evaluate_simulations(tfine = tfine, sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL, acd_fda_2 = acd_fda_2, plot = TRUE)
+results <- evaluate_simulations(tfine = tfine, sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL, acd_fda_2 = acd_fda_2, plot = TRUE, plot_subjects = c(48, 79, 81, 84))
+```
+```{r}
+sim_al_data <- list(Ly = Ly, Lt = Lt, x_full = tfine)
+data <- convert_to_full_subject_list(sim_al_data)
+LCS_SSM <- run_full_kalman_simulation(data, sim_data = NULL)
+results2 <- suppressWarnings(evaluate_lcsssm(LCS_SSM, sim_data = NULL, 
+                                             sim_al_data, plot = TRUE, 
+                                             plot_subjects = c(48, 79, 81, 84)))
+
+saveRDS(LCS_SSM, file = "~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/NORA_dissertation_ALD_LCS.rds")
 ```

@@ -627,6 +627,13 @@ simulate_one_kalman_path <- function(id) {
   upper <- y_KS + qZ * errors
   lower <- y_KS - qZ * errors
   
+  # True trajectory
+  if (!is.null(sim_data)) {
+    y_true <- sim_data$Y_no_noise[, id]
+  } else {
+    y_true <- rep(NA, length(y_KS))
+  }
+  
   # Construct output dataframe
   df <- data.frame(
     id = id,
@@ -635,20 +642,19 @@ simulate_one_kalman_path <- function(id) {
     y_KS = y_KS,
     CI_upper = upper,
     CI_lower = lower,
-    y_true = sim_data$Y_no_noise[, id]
+    y_true = y_true
   )
   
   return(df)
 }
 
-
 # Main execution
-run_full_kalman_simulation <- function(data, sim_data, parallel = TRUE) {
+run_full_kalman_simulation <- function(data, sim_data = NULL, parallel = TRUE) {
   multiSubjODERun <<- fit_multisubj_ct_model(data)
   n_subj <- length(data)
   
   if (parallel) {
-    num_cores <- detectCores() - 4
+    num_cores <- max(1, detectCores() - 4)
     cl <- makeCluster(num_cores)
     clusterExport(cl, varlist = c("multiSubjODERun", "data", "simulate_one_kalman_path", "sim_data"), envir = environment())
     LCS_SSM <- parLapply(cl, 1:n_subj, simulate_one_kalman_path)
@@ -657,7 +663,7 @@ run_full_kalman_simulation <- function(data, sim_data, parallel = TRUE) {
     LCS_SSM <- lapply(1:n_subj, simulate_one_kalman_path)
   }
   
-  LCS_SSM
+  return(LCS_SSM)
 }
 
 convert_to_full_subject_list <- function(sim_al_data) {
@@ -671,7 +677,31 @@ convert_to_full_subject_list <- function(sim_al_data) {
     y_full <- rep(NA_real_, length(x_full))
     
     # Get indices where the subject has data
-    match_idx <- match(sim_al_data$Lt[[i]], x_full)
+    match_idx <- sapply(sim_al_data$Lt[[i]], function(t) {
+      rounded_grid <- round(x_full, 3)
+      idx <- which(rounded_grid == round(t, 3))
+      
+      if (length(idx) > 0) {
+        return(idx[1])
+      } else {
+        # Find the closest two neighbors
+        diffs <- rounded_grid - round(t, 3)
+        before <- max(which(diffs < 0))
+        after <- min(which(diffs > 0))
+        
+        if (!is.na(before) && !is.na(after)) {
+          # Randomly select between before and after
+          return(sample(c(before, after), 1))
+        } else if (!is.na(before)) {
+          return(before)
+        } else if (!is.na(after)) {
+          return(after)
+        } else {
+          return(NA_integer_)
+        }
+      }
+    })
+    
     y_full[match_idx] <- sim_al_data$Ly[[i]]
     
     # Construct data.frame for the subject

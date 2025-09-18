@@ -16,10 +16,10 @@ begin = Sys.time()
 source("~/FDA_with_accelerated_longitudinal_designs/ldm.R")
 source("~/FDA_with_accelerated_longitudinal_designs/kerFctn.R")
 source("~/FDA_with_accelerated_longitudinal_designs/Rfunctions.R")
-seedid = 26
+seedid = 54
 n_subj = 500
-n_tp = 3
-data_gen = "homogeneous"
+n_tp = 2
+data_gen = "heterogeneous"
 
 age <- 0:19
 tfine <-  seq(0, 19, length.out = 240)
@@ -136,6 +136,6 @@ if (is.null(result_tbl2[[col_name]][[seedid]]) ||
   
   result_tbl2[[col_name]][[seedid]] <- result_list
 }
-result_tbl2[20:35,col_name]
+result_tbl2[50:55,col_name]
 saveRDS(result_tbl2, file = "~/FDA_with_accelerated_longitudinal_designs/result_tbl2.rds")
 ```

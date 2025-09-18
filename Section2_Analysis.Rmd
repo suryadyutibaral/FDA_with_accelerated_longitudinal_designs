@@ -75,7 +75,7 @@ summary_stats_latex <- summary_stats %>%
   mutate(
     stat_latex = paste0(mean, " (", sd, ")")
   ) %>%
-  select(condition, metric, stat_latex) %>%
+  dplyr::select(condition, metric, stat_latex) %>%
   pivot_wider(
     names_from = metric,
     values_from = stat_latex

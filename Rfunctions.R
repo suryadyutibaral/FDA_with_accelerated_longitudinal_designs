@@ -771,7 +771,7 @@ evaluate_lcsssm <- function(LCS_SSM, sim_data = NULL, sim_al_data, plot = FALSE,
     
     ks_vals_at_obs <- approx(x = tfine, y = ks, xout = obs_ages, rule = 2)$y
     mse_vec[id]  <- mean((ks_vals_at_obs - obs_vals)^2)
-    bias_vec[id] <- mean(ks_vals_at_obs - obs_vals)
+    bias_vec[id] <- mean(obs_vals - ks_vals_at_obs)
     
     # Bounds
     bound_vec[, id] <- with(LCS_SSM[[id]], 

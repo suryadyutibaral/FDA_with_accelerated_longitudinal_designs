@@ -71,7 +71,7 @@ sim_S1 <- function(method, rep_cond, iter) {
 
 methods <- c("normal", "replicate")
 rep_conds <- c(4, 10, 100)
-iters <- 1:50
+iters <- 1:100
 
 # Initialize result tibble
 result_tbl <- tibble(iter = iters)

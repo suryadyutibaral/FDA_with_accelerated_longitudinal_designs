@@ -144,9 +144,9 @@ bottom_row <- strip_and_tag(plot[[bottom_names[1]]], bottom_names[1]) +
 # Combine all
 combined_plot <- (top_row / bottom_row) +
   plot_layout(guides = "collect") &
-  theme(legend.position = "bottom")
+  theme(legend.position = "bottom") &
+  scale_y_continuous(limits = c(0, 500), breaks = c(0, 250, 500))
 
-# Add global title and axis labels
 combined_plot <- combined_plot +
   plot_annotation(
     title = "Width of the CI Comparison: Homogeneous Condition",
@@ -155,10 +155,10 @@ combined_plot <- combined_plot +
       axis.title.x = element_text(size = 12, margin = margin(t = 10)),
       axis.title.y = element_text(size = 12, margin = margin(r = 10))
     )
-  ) &
-  labs(x = "Time", y = "Width")
+  ) 
 
 combined_plot
+
 
 
 ```
@@ -179,7 +179,8 @@ bottom_row <- strip_and_tag(plot[[bottom_names[1]]], bottom_names[1]) +
 # Combine all
 combined_plot <- (top_row / bottom_row) +
   plot_layout(guides = "collect") &
-  theme(legend.position = "bottom")
+  theme(legend.position = "bottom") &
+  scale_y_continuous(limits = c(0, 500), breaks = c(0, 250, 500))
 
 # Add global title and axis labels
 combined_plot <- combined_plot +
@@ -190,8 +191,7 @@ combined_plot <- combined_plot +
       axis.title.x = element_text(size = 12, margin = margin(t = 10)),
       axis.title.y = element_text(size = 12, margin = margin(r = 10))
     )
-  ) &
-  labs(x = "Time", y = "Width")
+  ) 
 
 combined_plot
 ```
@@ -212,7 +212,8 @@ bottom_row <- strip_and_tag(plot[[bottom_names[1]]], bottom_names[1]) +
 # Combine all
 combined_plot <- (top_row / bottom_row) +
   plot_layout(guides = "collect") &
-  theme(legend.position = "bottom")
+  theme(legend.position = "bottom") &
+  scale_y_continuous(limits = c(0, 500), breaks = c(0, 250, 500))
 
 # Add global title and axis labels
 combined_plot <- combined_plot +
@@ -223,8 +224,7 @@ combined_plot <- combined_plot +
       axis.title.x = element_text(size = 12, margin = margin(t = 10)),
       axis.title.y = element_text(size = 12, margin = margin(r = 10))
     )
-  ) &
-  labs(x = "Time", y = "Width")
+  ) 
 
 combined_plot
 ```

@@ -1,0 +1,93 @@
+---
+title: "CI_coverage_analysis"
+author: "Suryadyuti Baral"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+sub_i_evals <- readRDS("coverage_homogeneous.rds")
+```
+
+
+```{r}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+
+plot_coverage <- function(sub_i_evals, n_subj = 100, nominal = 0.95) {
+  
+  df <- compute_coverage_with_sd(sub_i_evals) %>%
+    pivot_longer(
+      cols = -time,
+      names_to = c("method", ".value"),
+      names_pattern = "(.*)_(mean|sd)"
+    )
+  
+  ggplot(df, aes(x = time, y = mean, color = method, fill = method)) +
+    ylim(0,1) + 
+    
+    geom_ribbon(aes(ymin = mean - 1.96*sd/sqrt(n_subj), ymax = mean + 1.96*sd/sqrt(n_subj)),
+                alpha = 0.2,
+                color = NA) +
+    
+    geom_line(linewidth = 1.2) +
+    
+    geom_hline(yintercept = nominal,
+               linetype = "dashed",
+               linewidth = 1,
+               color = "black") +
+    
+    scale_color_manual(values = c(
+      "FDA" = "#0072B2",
+      "LCS" = "#D55E00"
+    )) +
+    
+    scale_fill_manual(values = c(
+      "FDA" = "#0072B2",
+      "LCS" = "#D55E00"
+    )) +
+    
+    labs(
+      title = "Coverage Probability Across Time",
+      x = "Time",
+      y = "Proportion Covered",
+      color = "Method",
+      fill  = "Method"
+    ) +
+    
+    theme_minimal(base_size = 14) +
+    theme(
+      plot.title = element_text(face = "bold", hjust = 0.5),
+      legend.position = "top",
+      panel.grid.minor = element_blank()
+    )
+}
+
+compute_coverage_with_sd <- function(sub_i_evals) {
+  
+  n_subj <- length(sub_i_evals)
+  n_time <- nrow(sub_i_evals[[1]]$fda_ci_pr)
+  
+  cov_fda <- cov_lcs <- matrix(NA, n_time, n_subj)
+  
+  for (i in seq_len(n_subj)) {
+    cov_fda[, i] <- rowMeans(sub_i_evals[[i]]$fda_ci_pr, na.rm = TRUE)
+    cov_lcs[, i] <- rowMeans(sub_i_evals[[i]]$lcs_ci_pr, na.rm = TRUE)
+  }
+  
+  data.frame(
+    time = seq(0, 19, length.out = 240),
+    FDA_mean = rowMeans(cov_fda),
+    FDA_sd   = apply(cov_fda, 1, sd),
+    LCS_mean = rowMeans(cov_lcs),
+    LCS_sd   = apply(cov_lcs, 1, sd)
+  )
+}
+```
+
+```{r}
+compute_coverage_with_sd(sub_i_evals)
+plot_coverage(sub_i_evals)
+```
+

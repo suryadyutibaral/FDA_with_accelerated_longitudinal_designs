@@ -77,6 +77,7 @@ results <- evaluate_simulations(tfine = seq(5,22, length.out = 18*12),
                                 plot_subjects = c(38, 438))
 
 mean(results$mse_opt)
+mean(results$mse_opt)/var(unlist(sim_al_data$Ly))
 mean(results$bias_opt)
 ```
 ```{r}
@@ -88,6 +89,7 @@ results2 <- suppressWarnings(evaluate_lcsssm(LCS_SSM, sim_data = NULL,
                                              plot_subjects = c(38, 438)))
 
 mean(results2$mse)
+mean(results2$mse)/var(unlist(sim_al_data$Ly))
 mean(results2$bias)
 
 saveRDS(LCS_SSM, file = "~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/GF_dissertation_ALD_sim_curves.rds")
@@ -154,6 +156,7 @@ results <- evaluate_simulations(tfine = seq(5,22, length.out = 18*12),
                                 plot_subjects = c(79, 154, 464, 461))
 
 mean(results$mse_opt)
+mean(results$mse_opt)/var(unlist(sim_al_data$Ly))
 mean(results$bias_opt)
 ```
 ```{r}
@@ -165,6 +168,7 @@ results2 <- suppressWarnings(evaluate_lcsssm(LCS_SSM, sim_data = NULL,
                                              plot_subjects = c(79, 154, 464, 461)))
 
 mean(results2$mse)
+mean(results2$mse)/var(unlist(sim_al_data$Ly))
 mean(results2$bias)
 
 saveRDS(LCS_SSM, file = "~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/GAK_dissertation_ALD_LCS.rds")
@@ -232,6 +236,7 @@ results <- evaluate_simulations(tfine = seq(5,22, length.out = 18*12),
                                 plot_subjects = c(1, 96, 422))
 
 mean(results$mse_opt)
+mean(results$mse_opt)/var(unlist(sim_al_data$Ly))
 mean(results$bias_opt)
 ```
 ```{r}
@@ -243,6 +248,7 @@ results2 <- suppressWarnings(evaluate_lcsssm(LCS_SSM, sim_data = NULL,
                                              plot_subjects = c(1, 96, 422)))
 
 mean(results2$mse)
+mean(results2$mse)/var(unlist(sim_al_data$Ly))
 mean(results2$bias)
 
 saveRDS(LCS_SSM, file = "~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/GC_dissertation_ALD_LCS.rds")
@@ -309,6 +315,7 @@ results <- evaluate_simulations(tfine = seq(5,22, length.out = 18*12),
                                 plot_subjects = c(86, 461))
 
 mean(results$mse_opt)
+mean(results$mse_opt)/var(unlist(sim_al_data$Ly))
 mean(results$bias_opt)
 ```
 ```{r}
@@ -320,6 +327,7 @@ results2 <- suppressWarnings(evaluate_lcsssm(LCS_SSM, sim_data = NULL,
                                              plot_subjects = c(86, 461)))
 
 mean(results2$mse)
+mean(results2$mse)/var(unlist(sim_al_data$Ly))
 mean(results2$bias)
 
 saveRDS(LCS_SSM, file = "~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/GQ_dissertation_ALD_LCS.rds")
@@ -390,6 +398,7 @@ saveRDS(acd_fda_2, file = "~/FDA_with_accelerated_longitudinal_designs/dissertat
 results <- evaluate_simulations(tfine = tfine, sim_al_data = list(Ly = Ly, Lt = Lt), sim_data = NULL, acd_fda_2 = acd_fda_2, plot = TRUE, plot_subjects = c(48, 79, 81, 84))
 
 mean(results$mse_opt)
+mean(results$mse_opt)/var(unlist(sim_al_data$Ly))
 mean(results$bias_opt)
 ```
 ```{r}
@@ -401,6 +410,7 @@ results2 <- suppressWarnings(evaluate_lcsssm(LCS_SSM, sim_data = NULL,
                                              plot_subjects = c(48, 79, 81, 84)))
 
 mean(results2$mse)
+mean(results2$mse)/var(unlist(sim_al_data$Ly))
 mean(results2$bias)
 
 saveRDS(LCS_SSM, file = "~/FDA_with_accelerated_longitudinal_designs/dissertation_dat/NORA_dissertation_ALD_LCS.rds")

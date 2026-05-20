@@ -233,9 +233,20 @@ plot_metric <- function(metric_type, df = metrics_long) {
   
   # Paired t-test
   ttest_res <- t.test(df_wide$Opt, df_wide$All, paired = TRUE)
+  
   t_stat <- round(ttest_res$statistic, 2)
-  p_val <- signif(ttest_res$p.value, 3)
-  test_label <- paste0("t = ", t_stat, ", p = ", p_val)
+  df_val <- round(ttest_res$parameter, 0)
+  
+  p_val <- if (ttest_res$p.value < .001) {
+    "< .001"
+  } else {
+    paste0("= ", format(round(ttest_res$p.value, 3), nsmall = 3))
+  }
+  
+  test_label <- paste0(
+    "t(", df_val, ") = ",
+    t_stat, ", p ", p_val
+  )
   
   # Calculate outliers
   df_outliers <- df_sub %>%
@@ -900,9 +911,20 @@ plot_metric_s2 <- function(metric_type, df = metrics_long) {
   
   # Paired t-test
   ttest_res <- t.test(df_wide$FDA, df_wide$LCS, paired = TRUE)
+  
   t_stat <- round(ttest_res$statistic, 2)
-  p_val <- signif(ttest_res$p.value, 3)
-  test_label <- paste0("t = ", t_stat, ", p = ", p_val)
+  df_val <- round(ttest_res$parameter, 0)
+  
+  p_val <- if (ttest_res$p.value < .001) {
+    "< .001"
+  } else {
+    paste0("= ", format(round(ttest_res$p.value, 3), nsmall = 3))
+  }
+  
+  test_label <- paste0(
+    "t(", df_val, ") = ",
+    t_stat, ", p ", p_val
+  )
   
   # Calculate outliers
   df_outliers <- df_sub %>%

@@ -15,7 +15,7 @@ library(ggplot2)
 library(tidyr)
 library(dplyr)
 
-plot_coverage <- function(sub_i_evals, n_subj = 100, nominal = 0.95) {
+plot_coverage <- function(sub_i_evals, n_subj = 100, nominal = c(0.95, 0.8)) {
   
   df <- compute_coverage_with_sd(sub_i_evals) %>%
     pivot_longer(
@@ -87,6 +87,12 @@ compute_coverage_with_sd <- function(sub_i_evals) {
 ```
 
 ```{r}
+compute_coverage_with_sd(sub_i_evals)
+plot_coverage(sub_i_evals)
+```
+
+```{r}
+sub_i_evals <- readRDS("coverage_heterogeneous.rds")
 compute_coverage_with_sd(sub_i_evals)
 plot_coverage(sub_i_evals)
 ```

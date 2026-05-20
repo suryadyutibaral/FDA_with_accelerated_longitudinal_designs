@@ -11,6 +11,7 @@ library(tibble)
 library(dplyr)
 source("Rfunctions.R")
 result_tbl2 <- readRDS("result_tbl2.rds")
+result_tbl_var <- readRDS("result_tbl2_var.rds")
 ```
 
 
@@ -69,6 +70,73 @@ summary_stats <- metrics_df %>%
 empty_counts
 summary_stats
 ```
+```{r}
+# remove seed column from both
+res2 <- result_tbl2 %>% dplyr::select(-1)
+res_var <- result_tbl_var %>% dplyr::select(-1)
+
+# conditions assumed to match
+conditions <- intersect(names(res2), names(res_var))
+
+mse_var_df <- map_dfr(conditions, function(cond) {
+  
+  n_rep <- min(nrow(res2), nrow(res_var))
+  
+  map_dfr(seq_len(n_rep), function(i) {
+    
+    mse_obj <- res2[[cond]][[i]]
+    var_obj <- res_var[[cond]][[i]]
+    
+    # skip failed / malformed reps
+    if (is.null(mse_obj) || 
+        !is.list(mse_obj) ||
+        !"Metrics" %in% names(mse_obj) ||
+        is.null(var_obj) ||
+        !"variance" %in% names(var_obj)) {
+      return(NULL)
+    }
+    
+    variance <- var_obj$variance
+    
+    # protect against bad variance
+    if (!is.finite(variance) || variance <= 0) {
+      return(NULL)
+    }
+    
+    metrics <- mse_obj$Metrics
+    
+    tibble(
+      condition = cond,
+      replication = i,
+      subject = metrics$subject,
+      MSE_FDA_scaled = metrics$MSE_FDA / variance,
+      MSE_LCS_scaled = metrics$MSE_LCS / variance,
+      variance = variance
+    )
+  })
+})
+
+# summarize
+summary_scaled_mse <- mse_var_df %>%
+  pivot_longer(
+    cols = c(MSE_FDA_scaled, MSE_LCS_scaled),
+    names_to = "metric",
+    values_to = "value"
+  ) %>%
+  mutate(
+    value = ifelse(abs(value) > 1e5, NA, value)
+  ) %>%
+  group_by(condition, metric) %>%
+  summarise(
+    mean = signif(mean(value, na.rm = TRUE), 3),
+    sd = signif(sd(value, na.rm = TRUE), 3),
+    .groups = "drop"
+  ) %>%
+  arrange(condition, metric)
+
+summary_scaled_mse
+```
+
 
 ```{r}
 summary_stats_latex <- summary_stats %>%
